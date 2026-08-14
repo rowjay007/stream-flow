@@ -1,0 +1,6 @@
+bin
+.git
+*.md
+*.log
+tmp
+*.temp

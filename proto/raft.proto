@@ -1,0 +1,12 @@
+syntax = "proto3";
+package raft;
+
+// Raw carries opaque raft wire bytes for streaming transport.
+message Raw {
+  bytes data = 1;
+}
+
+service Raft {
+  // Stream is a bidirectional stream of raw raft messages.
+  rpc Stream(stream Raw) returns (stream Raw) {}
+}
