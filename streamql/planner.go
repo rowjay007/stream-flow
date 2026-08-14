@@ -8,6 +8,7 @@ type Plan struct {
 	Filter      string
 	GroupBy     []string
 	Aggregates  []string
+	WindowMs    int
 }
 
 // Planify converts a Query AST into a simple physical plan.
@@ -19,9 +20,9 @@ func Planify(q *Query) *Plan {
 	var aggs []string
 	for _, s := range q.Select {
 		ls := strings.ToLower(s)
-		if strings.HasPrefix(ls, "count(") || strings.HasPrefix(ls, "sum(") {
+		if strings.HasPrefix(ls, "count(") || strings.HasPrefix(ls, "sum(") || strings.HasPrefix(ls, "avg(") {
 			aggs = append(aggs, s)
 		}
 	}
-	return &Plan{Source: q.From, Projections: q.Select, Filter: q.Where, GroupBy: q.GroupBy, Aggregates: aggs}
+	return &Plan{Source: q.From, Projections: q.Select, Filter: q.Where, GroupBy: q.GroupBy, Aggregates: aggs, WindowMs: q.WindowMs}
 }

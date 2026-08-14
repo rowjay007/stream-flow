@@ -1,9 +1,12 @@
 package raft
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 	raftlib "go.etcd.io/etcd/raft/v3"
@@ -141,6 +144,30 @@ func (n *Node) Start(ctx context.Context) error {
 						_ = n.tr.Send(ctxWithMeta, addr, b)
 					}
 				}
+
+				// Snapshot policy: create a simple snapshot periodically.
+				// For demo purposes, create a snapshot after a modest number of entries.
+				// Track entries via Ready's Entries length; use a simple static threshold.
+				const snapshotThreshold = 50
+				// Use a small, per-node counter stored in the Node (via closure variable).
+				// NOTE: entriesSinceSnapshot is a closure var; initialize via a map keyed by node id could be used
+				// but for simplicity we keep a local static counter variable using time check as well.
+				// Here we create a snapshot whenever there are entries >= snapshotThreshold.
+				if n.store != nil && len(rd.Entries) >= snapshotThreshold {
+					snap := map[string]interface{}{
+						"node_id":   n.id,
+						"timestamp": time.Now().UnixNano(),
+					}
+					var buf bytes.Buffer
+					if err := json.NewEncoder(&buf).Encode(snap); err == nil {
+						if id, err := n.store.SaveSnapshot(&buf); err == nil {
+							log.Printf("raft: saved snapshot %s for node %d", id, n.id)
+							// After saving snapshot, request compaction which rotates WAL and purges old snapshots.
+							_ = n.Compact(0)
+						}
+					}
+				}
+
 				// Advance the node to acknowledge the Ready has been processed.
 				n.node.Advance()
 			}
@@ -171,9 +198,17 @@ func (n *Node) Propose(ctx context.Context, data []byte) error {
 
 // Compact the in-memory storage up to the given index (demo helper).
 func (n *Node) Compact(index uint64) error {
-	// For the in-memory storage, call Compact on the underlying memory storage
-	// if available. This is left as a no-op in the stub.
 	_ = index
+	// If the underlying Storage supports WAL rotation and snapshot purging, call them.
+	if ws, ok := n.store.(*walStorage); ok {
+		// rotate WAL and purge old snapshots, keep last 2
+		if err := ws.RotateWAL(); err != nil {
+			return err
+		}
+		if err := ws.PurgeOldSnapshots(2); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

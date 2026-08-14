@@ -3,6 +3,7 @@ package raft
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -79,14 +80,94 @@ func (w *walStorage) AppendWAL(entries []byte) error {
 }
 
 func (w *walStorage) ReadWAL(fromIndex uint64) ([]byte, error) {
-	data, err := os.ReadFile(w.walPath())
+	// Read all wal files (rotated and current) in lexicographic order
+	entries, err := os.ReadDir(w.dir)
 	if err != nil {
 		return nil, err
 	}
-	if fromIndex >= uint64(len(data)) {
+	var files []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() {
+			continue
+		}
+		if name == "wal.log" || (len(name) > 4 && name[:4] == "wal.") {
+			files = append(files, filepath.Join(w.dir, name))
+		}
+	}
+	// sort lexicographically (os.ReadDir gives directory order but ensure sort)
+	if len(files) == 0 {
 		return nil, nil
 	}
-	return data[fromIndex:], nil
+	// simple concatenation
+	var out []byte
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, b...)
+	}
+	if fromIndex >= uint64(len(out)) {
+		return nil, nil
+	}
+	return out[fromIndex:], nil
+}
+
+// RotateWAL renames the current wal.log to wal.<timestamp>.log and starts a new wal.log file.
+func (w *walStorage) RotateWAL() error {
+	old := w.walPath()
+	if _, err := os.Stat(old); os.IsNotExist(err) {
+		return nil
+	}
+	ts := fmt.Sprintf("%d", timeNowUnixNano())
+	newname := filepath.Join(w.dir, "wal."+ts+".log")
+	if err := os.Rename(old, newname); err != nil {
+		return err
+	}
+	// create fresh wal.log
+	f, err := os.OpenFile(old, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+// PurgeOldSnapshots keeps only the latest `keep` snapshots and deletes older ones.
+func (w *walStorage) PurgeOldSnapshots(keep int) error {
+	entries, err := os.ReadDir(w.dir)
+	if err != nil {
+		return err
+	}
+	var snaps []os.DirEntry
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() && len(name) > 9 && name[:9] == "snapshot." {
+			snaps = append(snaps, e)
+		}
+	}
+	if len(snaps) <= keep {
+		return nil
+	}
+	// sort by name lexicographically (older first)
+	// entries already in directory order, use ioutil.ReadDir for sorted
+	files, err := ioutil.ReadDir(w.dir)
+	if err != nil {
+		return err
+	}
+	var snapFiles []os.FileInfo
+	for _, fi := range files {
+		name := fi.Name()
+		if !fi.IsDir() && len(name) > 9 && name[:9] == "snapshot." {
+			snapFiles = append(snapFiles, fi)
+		}
+	}
+	// delete older ones, keep latest `keep`
+	n := len(snapFiles)
+	for i := 0; i < n-keep; i++ {
+		os.Remove(filepath.Join(w.dir, snapFiles[i].Name()))
+	}
+	return nil
 }
 
 // timeNowUnixNano is a testable wrapper for time.Now().UnixNano().

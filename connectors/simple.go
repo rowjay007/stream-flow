@@ -1,6 +1,9 @@
 package connectors
 
-import "streamflow/processor"
+import (
+	"streamflow/processor"
+	"streamflow/schema"
+)
 
 // Source produces Records.
 type Source interface {
@@ -14,7 +17,9 @@ type Sink interface {
 
 // InMemorySource emits a predefined set of records then closes.
 type InMemorySource struct {
-	Records []processor.Record
+	Records    []processor.Record
+	Registry   *schema.Registry
+	SchemaName string
 }
 
 func (s *InMemorySource) Run() <-chan processor.Record {
@@ -22,6 +27,13 @@ func (s *InMemorySource) Run() <-chan processor.Record {
 	go func() {
 		defer close(ch)
 		for _, r := range s.Records {
+			// validate if registry provided
+			if s.Registry != nil && s.SchemaName != "" {
+				// Registry.Validate expects map[string]interface{}
+				if !s.Registry.Validate(s.SchemaName, r) {
+					continue
+				}
+			}
 			ch <- r
 		}
 	}()
