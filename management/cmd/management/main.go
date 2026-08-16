@@ -4,6 +4,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+
+	"streamflow/broker"
+	"streamflow/management/api"
 )
 
 func main() {
@@ -12,11 +16,14 @@ func main() {
 		addr = ":" + p
 	}
 
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte("ok"))
-	})
+	workDir := filepath.Join(os.TempDir(), "streamflow-management")
+	b, err := broker.NewBroker(workDir)
+	if err != nil {
+		log.Fatalf("new broker: %v", err)
+	}
+
+	srv := api.NewServer(b)
 
 	log.Printf("management-api listening on %s", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	log.Fatal((&http.Server{Addr: addr, Handler: srv.Handler()}).ListenAndServe())
 }

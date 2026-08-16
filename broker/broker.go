@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -49,6 +50,19 @@ func (b *Broker) CreateTopic(name string) (*Topic, error) {
 	topic.Segments = append(topic.Segments, seg)
 	b.topics[name] = topic
 	return topic, nil
+}
+
+// ListTopics returns all known topic names in lexical order.
+func (b *Broker) ListTopics() []string {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	names := make([]string, 0, len(b.topics))
+	for name := range b.topics {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func (b *Broker) Produce(topicName string, key, value []byte, headers map[string]string) (Record, error) {
