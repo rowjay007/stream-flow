@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"time"
 
@@ -44,9 +45,22 @@ func (n *Node) Start(ctx context.Context) error {
 		ApplySnapshot(raftpb.Snapshot) error
 	} = mem
 
-	// If we have a persistent store, wrap the memory storage so Append
-	// persists entries to the WAL as raft produces them.
+	// If we have a persistent store, load snapshot (if present) and wrap
+	// the memory storage so Append persists entries to the WAL as raft produces them.
 	if n.store != nil {
+		// Load snapshot and apply to memory storage before replaying WAL
+		if rc, err := n.store.LoadSnapshot(); err == nil && rc != nil {
+			// Read entire snapshot and apply
+			var snapBytes []byte
+			snapBytes, _ = io.ReadAll(rc)
+			rc.Close()
+			if len(snapBytes) > 0 {
+				// create a dummy Snapshot with Data set to snapBytes
+				var s raftpb.Snapshot
+				s.Data = snapBytes
+				_ = mem.ApplySnapshot(s)
+			}
+		}
 		if data, err := n.store.ReadWAL(0); err == nil && len(data) > 0 {
 			if ents, err := unmarshalEntries(data); err == nil && len(ents) > 0 {
 				// Create persistent memory wrapper and populate with loaded ents
@@ -198,9 +212,11 @@ func (n *Node) Propose(ctx context.Context, data []byte) error {
 
 // Compact the in-memory storage up to the given index (demo helper).
 func (n *Node) Compact(index uint64) error {
-	_ = index
-	// If the underlying Storage supports WAL rotation and snapshot purging, call them.
+	// If the underlying Storage supports WAL compaction and snapshot purging, call them.
 	if ws, ok := n.store.(*walStorage); ok {
+		if err := ws.Compact(index); err != nil {
+			return err
+		}
 		// rotate WAL and purge old snapshots, keep last 2
 		if err := ws.RotateWAL(); err != nil {
 			return err

@@ -41,7 +41,7 @@ func TestThreeNodeInProcClusterReplication(t *testing.T) {
 			t.Fatalf("mktemp: %v", err)
 		}
 		defer os.RemoveAll(dir)
-		store, err := NewWALStorage(filepath.Join(dir, "wal"))
+		store, err := NewWALStorage(filepath.Join(dir, "wal"), nil)
 		if err != nil {
 			t.Fatalf("wal store: %v", err)
 		}

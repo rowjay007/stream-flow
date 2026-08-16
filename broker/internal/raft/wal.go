@@ -1,26 +1,32 @@
 package raft
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	raftpb "go.etcd.io/etcd/raft/v3/raftpb"
+	"streamflow/broker/storage"
 )
 
 // walStorage is a simple append-only WAL implementation storing entries
 // in a single file named wal.log and snapshots as snapshot.<id>.snap
 type walStorage struct {
-	dir string
+	dir     string
+	offload storage.Offloader
 }
 
 // NewWALStorage creates a WAL storage rooted at dir.
-func NewWALStorage(dir string) (Storage, error) {
+func NewWALStorage(dir string, off storage.Offloader) (Storage, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	return &walStorage{dir: dir}, nil
+	return &walStorage{dir: dir, offload: off}, nil
 }
 
 func (w *walStorage) walPath() string { return filepath.Join(w.dir, "wal.log") }
@@ -35,6 +41,18 @@ func (w *walStorage) SaveSnapshot(r io.Reader) (string, error) {
 	defer f.Close()
 	if _, err := io.Copy(f, r); err != nil {
 		return "", err
+	}
+	// If configured, offload snapshot to external store.
+	if w.offload != nil {
+		// reopen file for read
+		rf, err := os.Open(path)
+		if err == nil {
+			defer rf.Close()
+			// upload with bucket "snapshots" and key as filename
+			if _, err := w.offload.Upload(context.Background(), "snapshots", filepath.Base(path), rf, -1); err != nil {
+				// non-fatal: log and continue
+			}
+		}
 	}
 	return id, nil
 }
@@ -55,6 +73,30 @@ func (w *walStorage) LoadSnapshot() (io.ReadCloser, error) {
 		}
 	}
 	if latest == "" {
+		// If no local snapshot but offload is configured, try to fetch latest from offload
+		if w.offload != nil {
+			keys, err := w.offload.List(context.Background(), "snapshots", "snapshot.")
+			if err == nil && len(keys) > 0 {
+				// pick lexicographically last
+				latestKey := keys[0]
+				for _, k := range keys {
+					if k > latestKey {
+						latestKey = k
+					}
+				}
+				// download and save locally
+				rc, err := w.offload.Download(context.Background(), "snapshots", latestKey)
+				if err == nil {
+					defer rc.Close()
+					dst := filepath.Join(w.dir, latestKey)
+					if f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644); err == nil {
+						io.Copy(f, rc)
+						f.Close()
+						return os.Open(dst)
+					}
+				}
+			}
+		}
 		return nil, os.ErrNotExist
 	}
 	return os.Open(filepath.Join(w.dir, latest))
@@ -166,6 +208,56 @@ func (w *walStorage) PurgeOldSnapshots(keep int) error {
 	n := len(snapFiles)
 	for i := 0; i < n-keep; i++ {
 		os.Remove(filepath.Join(w.dir, snapFiles[i].Name()))
+	}
+	return nil
+}
+
+// Compact truncates WAL entries up to the provided index (inclusive).
+// Entries with Index > compactIndex are preserved. This rewrites the current
+// wal.log with the remaining entries and removes rotated WAL files.
+func (w *walStorage) Compact(compactIndex uint64) error {
+	data, err := w.ReadWAL(0)
+	if err != nil {
+		return err
+	}
+	ents, err := unmarshalEntries(data)
+	if err != nil {
+		return err
+	}
+	var keep []raftpb.Entry
+	for _, e := range ents {
+		if e.Index > compactIndex {
+			keep = append(keep, e)
+		}
+	}
+	// marshal remaining entries and overwrite wal.log
+	b, err := marshalEntries(keep)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(w.walPath(), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	// write block header + payload (keeps same format as AppendWAL)
+	l := uint32(len(b))
+	hdr := []byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}
+	if _, err := f.Write(hdr); err != nil {
+		return err
+	}
+	if _, err := f.Write(b); err != nil {
+		return err
+	}
+	// remove rotated wal.*.log files
+	entries, err := os.ReadDir(w.dir)
+	if err == nil {
+		for _, e := range entries {
+			name := e.Name()
+			if !e.IsDir() && strings.HasPrefix(name, "wal.") {
+				os.Remove(filepath.Join(w.dir, name))
+			}
+		}
 	}
 	return nil
 }

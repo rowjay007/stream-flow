@@ -20,6 +20,8 @@ type Storage interface {
 
 	// ReadWAL reads WAL entries since the provided index.
 	ReadWAL(fromIndex uint64) ([]byte, error)
+	// Compact truncates WAL entries up to the provided index (inclusive).
+	Compact(index uint64) error
 }
 
 // NewInMemoryStorage returns a trivial in-memory storage used for tests and
@@ -36,3 +38,4 @@ func (m *memStorage) AppendWAL(entries []byte) error           { return nil }
 func (m *memStorage) ReadWAL(fromIndex uint64) ([]byte, error) {
 	return nil, nil
 }
+func (m *memStorage) Compact(index uint64) error { _ = index; return nil }

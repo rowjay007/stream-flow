@@ -1,0 +1,92 @@
+name: MinIO Integration Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  minio-integration:
+    runs-on: ubuntu-latest
+    services:
+      minio:
+        image: minio/minio:latest
+        ports:
+          - 9000:9000
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        options: >-
+          --health-cmd "curl -f http://127.0.0.1:9000/minio/health/live || exit 1"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+        command: server /data
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+
+      - name: Wait for MinIO
+        run: |
+          for i in {1..30}; do
+            if curl -sS http://127.0.0.1:9000/minio/health/live; then break; fi
+            sleep 1
+          done
+
+      - name: Download mc client
+        run: |
+          wget -q https://dl.min.io/client/mc/release/linux-amd64/mc
+          chmod +x mc
+          sudo mv mc /usr/local/bin/mc
+
+      - name: Configure bucket
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        run: |
+          mc alias set myminio http://127.0.0.1:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
+          mc mb myminio/streamflow || true
+
+      - name: Run MinIO integration test
+        env:
+          MINIO_ENDPOINT: 127.0.0.1:9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_BUCKET: streamflow
+        run: |
+          go test ./broker/internal/raft -run TestWALMinIOIntegration -v
+name: MinIO Integration Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  minio-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=minio -e MINIO_ROOT_PASSWORD=minio123 minio/minio:RELEASE.2023-08-05T03-14-24Z server /data || docker start minio
+          for i in $(seq 1 30); do
+            if curl -sS http://localhost:9000/minio/health/ready; then break; fi
+            sleep 1
+          done
+      - name: Run MinIO integration tests
+        env:
+          MINIO_ENDPOINT: localhost:9000
+          MINIO_ACCESS_KEY: minio
+          MINIO_SECRET_KEY: minio123
+          MINIO_BUCKET: streamflow-test
+        run: |
+          go test ./broker/internal/raft -run TestWALMinIOIntegration -v
