@@ -64,7 +64,6 @@ var (
 	)
 )
 
-// Server exposes management endpoints for topic lifecycle and data-plane checks.
 type Server struct {
 	broker *broker.Broker
 	apiKey string

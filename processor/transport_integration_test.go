@@ -7,7 +7,7 @@ import (
 )
 
 func TestProcessorEchoStream(t *testing.T) {
-	// start server
+
 	srv, lis, err := StartProcessorServer("127.0.0.1:0", "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -23,12 +23,11 @@ func TestProcessorEchoStream(t *testing.T) {
 	}
 	defer cs.Close()
 
-	// send a record
 	rec := Record{"x": 1, "group": "a"}
 	if err := cs.Send(rec); err != nil {
 		t.Fatal(err)
 	}
-	// receive echo
+
 	got, err := cs.Recv()
 	if err != nil {
 		t.Fatal(err)

@@ -5,15 +5,12 @@ import (
 	"time"
 )
 
-// Record represents a single event payload in a generic map form.
 type Record map[string]interface{}
 
-// Operator consumes a channel of Records and returns an output channel of Records.
 type Operator interface {
 	Process(in <-chan Record) <-chan Record
 }
 
-// MapOperator applies a transformation function to each record.
 type MapOperator struct {
 	Fn func(Record) Record
 }
@@ -32,8 +29,6 @@ func (m *MapOperator) Process(in <-chan Record) <-chan Record {
 	return out
 }
 
-// FilterOperator filters records by predicate. If predicate returns true,
-// the record is forwarded.
 type FilterOperator struct {
 	Pred func(Record) bool
 }
@@ -51,9 +46,6 @@ func (f *FilterOperator) Process(in <-chan Record) <-chan Record {
 	return out
 }
 
-// AggregateOperator performs a simple count aggregation grouping by the
-// provided key. When the input channel closes it emits a single Record with
-// counts under the field "counts".
 type AggregateOperator struct {
 	Key string
 }
@@ -80,8 +72,6 @@ func (a *AggregateOperator) Process(in <-chan Record) <-chan Record {
 	return out
 }
 
-// WindowAggregateOperator emits aggregated counts per key every WindowSize
-// records (simple count-based tumbling window).
 type WindowAggregateOperator struct {
 	Key        string
 	WindowSize int
@@ -110,7 +100,7 @@ func (w *WindowAggregateOperator) Process(in <-chan Record) <-chan Record {
 				counts = make(map[string]int)
 			}
 		}
-		// emit remaining
+
 		if len(counts) > 0 {
 			out <- Record{"counts": counts}
 		}
@@ -118,7 +108,6 @@ func (w *WindowAggregateOperator) Process(in <-chan Record) <-chan Record {
 	return out
 }
 
-// JoinOperator performs a simple hash-join against a preloaded right-side map.
 type JoinOperator struct {
 	LeftKey  string
 	RightKey string
@@ -154,14 +143,12 @@ func (j *JoinOperator) Process(in <-chan Record) <-chan Record {
 	return out
 }
 
-// AggSpec describes an aggregate function to compute.
 type AggSpec struct {
-	Func  string // e.g. "sum", "avg", "count"
-	Field string // field to aggregate, "*" for count
-	Alias string // output field name
+	Func  string
+	Field string
+	Alias string
 }
 
-// AggregateFuncsOperator computes one or more aggregates grouped by Key.
 type AggregateFuncsOperator struct {
 	Key  string
 	Aggs []AggSpec
@@ -171,8 +158,8 @@ func (a *AggregateFuncsOperator) Process(in <-chan Record) <-chan Record {
 	out := make(chan Record, 1)
 	go func() {
 		defer close(out)
-		sums := make(map[string]map[string]float64) // group -> alias -> sum
-		counts := make(map[string]map[string]int)   // group -> alias -> count
+		sums := make(map[string]map[string]float64)
+		counts := make(map[string]map[string]int)
 		for r := range in {
 			g := ""
 			if v, ok := r[a.Key]; ok {
@@ -196,7 +183,7 @@ func (a *AggregateFuncsOperator) Process(in <-chan Record) <-chan Record {
 				case "count":
 					counts[g][alias]++
 				case "sum", "avg":
-					// attempt to parse numeric field
+
 					if v, ok := r[spec.Field]; ok {
 						switch n := v.(type) {
 						case int:
@@ -210,20 +197,18 @@ func (a *AggregateFuncsOperator) Process(in <-chan Record) <-chan Record {
 				}
 			}
 		}
-		// emit a single record containing aggregates per group
-		// format: {"group": {<group>: {alias: value}}}
+
 		res := make(Record)
 		groups := make(map[string]map[string]interface{})
 		for g, s := range sums {
 			groups[g] = make(map[string]interface{})
 			for alias, sum := range s {
-				// find count for alias
+
 				c := counts[g][alias]
 				if c == 0 {
 					groups[g][alias] = sum
 				} else {
-					// determine if avg requested
-					// find spec
+
 					isAvg := false
 					for _, spec := range a.Aggs {
 						al := spec.Alias
@@ -242,7 +227,7 @@ func (a *AggregateFuncsOperator) Process(in <-chan Record) <-chan Record {
 					}
 				}
 			}
-			// handle pure counts that had no sums
+
 			for alias, cnt := range counts[g] {
 				if _, ok := s[alias]; !ok {
 					groups[g][alias] = cnt
@@ -255,18 +240,17 @@ func (a *AggregateFuncsOperator) Process(in <-chan Record) <-chan Record {
 	return out
 }
 
-// TimeWindowAggregateOperator performs aggregate functions on tumbling time windows.
 type TimeWindowAggregateOperator struct {
 	Key      string
 	Aggs     []AggSpec
-	Duration int // milliseconds
+	Duration int
 }
 
 func (t *TimeWindowAggregateOperator) Process(in <-chan Record) <-chan Record {
 	out := make(chan Record)
 	go func() {
 		defer close(out)
-		// simple ticker-based tumbling windows
+
 		ticker := time.NewTicker(time.Duration(t.Duration) * time.Millisecond)
 		defer ticker.Stop()
 		sums := make(map[string]map[string]float64)
@@ -310,7 +294,7 @@ func (t *TimeWindowAggregateOperator) Process(in <-chan Record) <-chan Record {
 			}
 			res["groups"] = groups
 			out <- res
-			// reset
+
 			sums = make(map[string]map[string]float64)
 			counts = make(map[string]map[string]int)
 		}

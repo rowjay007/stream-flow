@@ -11,14 +11,12 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// Offloader uploads and downloads snapshot blobs to/from an external store.
 type Offloader interface {
 	Upload(ctx context.Context, bucket, key string, r io.Reader, size int64) (string, error)
 	Download(ctx context.Context, bucket, key string) (io.ReadCloser, error)
 	List(ctx context.Context, bucket, prefix string) ([]string, error)
 }
 
-// LocalOffloader stores blobs in a local directory (useful for testing).
 type LocalOffloader struct {
 	Dir string
 }
@@ -69,7 +67,6 @@ func (l *LocalOffloader) List(ctx context.Context, bucket, prefix string) ([]str
 	return out, nil
 }
 
-// S3Offloader uploads to an S3-compatible endpoint using MinIO client.
 type S3Offloader struct {
 	client *minio.Client
 }
@@ -86,7 +83,7 @@ func NewS3Offloader(endpoint, accessKey, secretKey string, useSSL bool) (*S3Offl
 }
 
 func (s *S3Offloader) Upload(ctx context.Context, bucket, key string, r io.Reader, size int64) (string, error) {
-	// Ensure bucket exists
+
 	exists, err := s.client.BucketExists(ctx, bucket)
 	if err != nil {
 		return "", err
@@ -113,7 +110,7 @@ func (s *S3Offloader) Download(ctx context.Context, bucket, key string) (io.Read
 
 func (s *S3Offloader) List(ctx context.Context, bucket, prefix string) ([]string, error) {
 	var out []string
-	// use ListObjects to collect keys
+
 	opts := minio.ListObjectsOptions{Prefix: prefix, Recursive: true}
 	for obj := range s.client.ListObjects(ctx, bucket, opts) {
 		if obj.Err != nil {

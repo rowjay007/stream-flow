@@ -13,7 +13,6 @@ import (
 
 var ErrDraining = errors.New("broker is draining")
 
-// Broker implements the single-node broker foundation described in Phase 1.
 type Broker struct {
 	dir          string
 	mu           sync.RWMutex
@@ -67,7 +66,6 @@ func (b *Broker) CreateTopic(name string) (*Topic, error) {
 	return topic, nil
 }
 
-// ListTopics returns all known topic names in lexical order.
 func (b *Broker) ListTopics() []string {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -111,15 +109,12 @@ func (b *Broker) Produce(topicName string, key, value []byte, headers map[string
 	return record, nil
 }
 
-// Drain marks the broker as draining for the specified duration and rejects
-// new produce requests during that interval.
 func (b *Broker) Drain(d time.Duration) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.drainingTill = time.Now().Add(d)
 }
 
-// IsDraining reports whether the broker is currently in drain mode.
 func (b *Broker) IsDraining() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -183,8 +178,6 @@ func (b *Broker) Fetch(topicName string, fromOffset int64, maxBytes int64) ([]Re
 	return acc, nil
 }
 
-// FetchRaw returns the underlying log file and payload position/length for the
-// record at offset. Callers can use SendFile for a zero-copy transfer path.
 func (b *Broker) FetchRaw(topicName string, offset int64) (*os.File, int64, int64, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()

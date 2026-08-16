@@ -11,8 +11,6 @@ import (
 	"time"
 )
 
-// Record models a broker record with the fields required for single-node
-// append-only log storage and consumer fetches.
 type Record struct {
 	Key       []byte            `json:"key"`
 	Value     []byte            `json:"value"`
@@ -21,7 +19,6 @@ type Record struct {
 	Offset    int64             `json:"offset"`
 }
 
-// Topic represents a named topic and its underlying segment files.
 type Topic struct {
 	Name       string
 	Partition  int
@@ -31,7 +28,6 @@ type Topic struct {
 	mu         sync.Mutex
 }
 
-// Segment is an append-only log segment with an offset index and optional time index.
 type Segment struct {
 	Path        string
 	LogPath     string

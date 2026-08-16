@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// BenchmarkInMemoryEventRate provides an upper-bound pipeline event-rate baseline.
 func BenchmarkInMemoryEventRate(b *testing.B) {
 	payload := map[string]interface{}{"id": "a", "v": 1}
 	var sink int

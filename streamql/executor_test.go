@@ -77,12 +77,12 @@ func TestExecuteSumAvgGroupBy(t *testing.T) {
 	}
 	groups, ok := final["groups"].(map[string]map[string]interface{})
 	if !ok {
-		// try fallback shape
+
 		gm, ok2 := final["groups"].(map[string]interface{})
 		if !ok2 {
 			t.Fatalf("expected groups map in final result: %#v", final)
 		}
-		// convert
+
 		groups = make(map[string]map[string]interface{})
 		for k, v := range gm {
 			if mm, ok3 := v.(map[string]interface{}); ok3 {

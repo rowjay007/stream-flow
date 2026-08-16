@@ -8,7 +8,6 @@ import (
 	"streamflow/broker"
 )
 
-// Producer wraps the broker API for producing records.
 type Producer struct {
 	broker *broker.Broker
 }
@@ -30,7 +29,6 @@ func (p *Producer) Send(topic string, key, value []byte, headers map[string]stri
 	return p.broker.Produce(topic, key, value, headers)
 }
 
-// Consumer wraps the broker API for offset-based consumption.
 type Consumer struct {
 	broker *broker.Broker
 }

@@ -7,8 +7,6 @@ import (
 
 var ErrOutOfOrderSequence = errors.New("out-of-order producer sequence")
 
-// ProduceIdempotent enforces monotonic producer sequences per topic+producer.
-// Duplicate sequence numbers return the cached record and duplicate=true.
 func (b *Broker) ProduceIdempotent(topicName string, key, value []byte, headers map[string]string, producerID string, sequence int64) (Record, bool, error) {
 	if producerID == "" {
 		return Record{}, false, fmt.Errorf("producerID is required")

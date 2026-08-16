@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// CheckpointScheduler periodically persists checkpoints to snapshot storage.
 type CheckpointScheduler struct {
 	Interval time.Duration
 	StopCh   chan struct{}

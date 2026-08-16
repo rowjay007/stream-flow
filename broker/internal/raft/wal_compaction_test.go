@@ -12,7 +12,7 @@ func TestWALCompactionKeepsLaterEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new wal: %v", err)
 	}
-	// create entries with Index 1..5
+
 	var ents []raftpb.Entry
 	for i := uint64(1); i <= 5; i++ {
 		ents = append(ents, raftpb.Entry{Index: i, Term: 1})

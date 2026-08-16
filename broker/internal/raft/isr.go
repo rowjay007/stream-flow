@@ -2,7 +2,6 @@ package raft
 
 import "sync"
 
-// ISRManager tracks in-sync replicas for a partition and enforces minISR.
 type ISRManager struct {
 	mu       sync.RWMutex
 	members  map[uint64]struct{}

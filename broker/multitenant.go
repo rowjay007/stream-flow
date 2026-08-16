@@ -7,7 +7,6 @@ import (
 	"sync"
 )
 
-// TenantBroker adds a thin namespacing layer on top of Broker for multi-tenancy.
 type TenantBroker struct {
 	b  *Broker
 	mu sync.Mutex
@@ -25,12 +24,12 @@ func (t *TenantBroker) CreateTopicNS(namespace, name string) (*Topic, error) {
 	if err := os.MkdirAll(nsDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create ns dir: %w", err)
 	}
-	// Delegate to existing topic creation but ensure topic dir under namespace
+
 	topicDir := filepath.Join(nsDir, name)
 	if err := os.MkdirAll(topicDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create topic dir: %w", err)
 	}
-	// Use Broker's internal helpers by duplicating logic for safety
+
 	if _, exists := t.b.topics[name]; exists {
 		return t.b.topics[name], nil
 	}

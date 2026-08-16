@@ -17,7 +17,7 @@ func main() {
 		log.Fatalf("failed to start processor server: %v", err)
 	}
 	fmt.Printf("processor server listening %s (listener %v)\n", *addr, lis.Addr())
-	// block
+
 	select {}
 	_ = srv
 	_ = context.TODO()

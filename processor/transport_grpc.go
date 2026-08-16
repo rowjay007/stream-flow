@@ -9,8 +9,6 @@ import (
 	"sync"
 )
 
-// StartProcessorServer starts a simple TCP server that accepts newline-delimited JSON records
-// and echoes them back (for now). Returns the listener so tests can obtain the bound address.
 func StartProcessorServer(listenAddr, serverCert, serverKey string) (interface {
 	Stop()
 	Addr() net.Addr
@@ -58,10 +56,10 @@ func (s *tcpProcessorServer) handle(conn net.Conn) {
 		}
 		var rec Record
 		if err := json.Unmarshal(line, &rec); err != nil {
-			// ignore
+
 			continue
 		}
-		// echo back
+
 		b, _ := json.Marshal(rec)
 		b = append(b, '\n')
 		if _, err := w.Write(b); err != nil {
@@ -78,7 +76,6 @@ func (s *tcpProcessorServer) Stop() {
 
 func (s *tcpProcessorServer) Addr() net.Addr { return s.ln.Addr() }
 
-// ClientStream is a simple TCP client that communicates newline-delimited JSON.
 type ClientStream struct {
 	conn net.Conn
 	r    *bufio.Reader

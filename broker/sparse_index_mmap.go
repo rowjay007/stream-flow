@@ -7,7 +7,6 @@ import (
 	"os"
 )
 
-// SparseMMapIndex stores offset->position entries using a fixed-width mmap file.
 type SparseMMapIndex struct {
 	file    *os.File
 	data    []byte

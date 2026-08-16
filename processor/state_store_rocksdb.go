@@ -1,4 +1,5 @@
 //go:build rocksdb
+// +build rocksdb
 
 package processor
 
@@ -13,8 +14,6 @@ import (
 	"path/filepath"
 )
 
-// RocksDBStateStore is a build-tagged placeholder that validates directory wiring
-// for RocksDB-backed state when compiled with -tags rocksdb.
 type RocksDBStateStore struct {
 	dir string
 	kv  map[string][]byte

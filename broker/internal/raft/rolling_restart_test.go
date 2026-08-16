@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// TestSingleNodeRestart ensures a single node persists WAL across restart.
 func TestSingleNodeRestart(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewWALStorage(filepath.Join(dir, "wal"), nil)
@@ -22,11 +21,10 @@ func TestSingleNodeRestart(t *testing.T) {
 	if err := node.Propose(context.Background(), []byte("hello")); err != nil {
 		t.Fatalf("propose: %v", err)
 	}
-	// allow Ready loop to persist
+
 	time.Sleep(200 * time.Millisecond)
 	node.Stop()
 
-	// restart node with same store dir
 	store2, err := NewWALStorage(filepath.Join(dir, "wal"), nil)
 	if err != nil {
 		t.Fatalf("new wal2: %v", err)
@@ -46,7 +44,6 @@ func TestSingleNodeRestart(t *testing.T) {
 	}
 }
 
-// TestClusterNodesStartStop is a lifecycle smoke test for multiple nodes.
 func TestClusterNodesStartStop(t *testing.T) {
 	nodes := make([]*Node, 3)
 	for i := 0; i < 3; i++ {

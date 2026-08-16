@@ -5,17 +5,14 @@ import (
 	"streamflow/schema"
 )
 
-// Source produces Records.
 type Source interface {
 	Run() <-chan processor.Record
 }
 
-// Sink consumes Records.
 type Sink interface {
 	Consume(<-chan processor.Record)
 }
 
-// InMemorySource emits a predefined set of records then closes.
 type InMemorySource struct {
 	Records    []processor.Record
 	Registry   *schema.Registry
@@ -27,9 +24,9 @@ func (s *InMemorySource) Run() <-chan processor.Record {
 	go func() {
 		defer close(ch)
 		for _, r := range s.Records {
-			// validate if registry provided
+
 			if s.Registry != nil && s.SchemaName != "" {
-				// Registry.Validate expects map[string]interface{}
+
 				if !s.Registry.Validate(s.SchemaName, r) {
 					continue
 				}
@@ -40,7 +37,6 @@ func (s *InMemorySource) Run() <-chan processor.Record {
 	return ch
 }
 
-// InMemorySink collects records into a slice (not concurrency-safe for simplicity).
 type InMemorySink struct {
 	Collected []processor.Record
 }

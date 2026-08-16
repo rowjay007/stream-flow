@@ -43,16 +43,13 @@ func (rawCodec) Name() string { return "raw" }
 
 var raftStreamDesc = &grpc.StreamDesc{StreamName: "Stream", ServerStreams: true, ClientStreams: true}
 
-// GRPCTransport implements the Transport interface using gRPC. It exposes a
-// simple unary RPC "Send" that carries raw bytes; the server side registers
-// a handler callback invoked for incoming payloads.
 type GRPCTransport struct {
 	mu      sync.Mutex
 	ln      net.Listener
 	srv     *grpc.Server
 	conns   map[string]*grpc.ClientConn
 	handler func([]byte) error
-	// per-peer persistent client streams reuse
+
 	streams    map[string]*clientStream
 	tls        bool
 	caPool     *x509.CertPool
@@ -64,9 +61,6 @@ type clientStream struct {
 	stream grpc.ClientStream
 }
 
-// NewGRPCTransport starts a gRPC server listening on the provided address.
-// Use address ":0" to auto-assign a free port; call Addr() to retrieve the
-// bound address.
 func NewGRPCTransport(listenAddr, serverCertFile, serverKeyFile, caFile, clientCertFile, clientKeyFile string) (*GRPCTransport, error) {
 	encoding.RegisterCodec(rawCodec{})
 	ln, err := net.Listen("tcp", listenAddr)
@@ -77,14 +71,14 @@ func NewGRPCTransport(listenAddr, serverCertFile, serverKeyFile, caFile, clientC
 
 	var opts []grpc.ServerOption
 	if serverCertFile != "" && serverKeyFile != "" {
-		// Load server cert
+
 		serverCert, err := tls.LoadX509KeyPair(serverCertFile, serverKeyFile)
 		if err != nil {
 			return nil, err
 		}
 		tlsCfg := &tls.Config{Certificates: []tls.Certificate{serverCert}}
 		if caFile != "" {
-			// require and verify client certs signed by CA
+
 			caBytes, err := os.ReadFile(caFile)
 			if err != nil {
 				return nil, err
@@ -99,7 +93,7 @@ func NewGRPCTransport(listenAddr, serverCertFile, serverKeyFile, caFile, clientC
 		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsCfg)))
 		g.tls = true
 	}
-	// If client cert is provided, load it for use when dialing peers
+
 	if clientCertFile != "" && clientKeyFile != "" {
 		c, err := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
 		if err != nil {
@@ -119,9 +113,7 @@ func NewGRPCTransport(listenAddr, serverCertFile, serverKeyFile, caFile, clientC
 		g.caPool = pool
 	}
 	g.srv = grpc.NewServer(opts...)
-	// Register a streaming service "raft.Raft" with method "Stream" for
-	// bidirectional raw byte streaming. The server handler reads incoming
-	// []byte messages and invokes the registered handler callback.
+
 	sd := &grpc.ServiceDesc{
 		ServiceName: "raft.Raft",
 		HandlerType: (*interface{})(nil),
@@ -159,7 +151,6 @@ func (g *GRPCTransport) Addr() string {
 	return g.ln.Addr().String()
 }
 
-// RegisterHandler sets the callback invoked for incoming payloads.
 func (g *GRPCTransport) RegisterHandler(h func([]byte) error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -174,10 +165,9 @@ func (g *GRPCTransport) getConn(addr string) (*grpc.ClientConn, error) {
 	}
 	var conn *grpc.ClientConn
 	var err error
-	// Configure TLS for client dialing based on available CA / client certs
+
 	if g.tls {
-		// If CA is available, use it to verify server certs; otherwise use insecure
-		// credentials (fallback).
+
 		if g.caPool != nil {
 			tlsCfg := &tls.Config{RootCAs: g.caPool}
 			if g.clientCert != nil {
@@ -202,11 +192,11 @@ func (g *GRPCTransport) Send(ctx context.Context, to string, payload []byte) err
 	if err != nil {
 		return err
 	}
-	// reuse or create a persistent client stream for this peer
+
 	g.mu.Lock()
 	cs := g.streams[to]
 	if cs == nil {
-		// create new stream
+
 		stream, err := conn.NewStream(ctx, raftStreamDesc, "/raft.Raft/Stream", grpc.ForceCodec(rawCodec{}))
 		if err != nil {
 			g.mu.Unlock()
@@ -220,7 +210,7 @@ func (g *GRPCTransport) Send(ctx context.Context, to string, payload []byte) err
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 	if err := cs.stream.SendMsg(payload); err != nil {
-		// on error, try to recreate the stream once
+
 		_ = cs.stream.CloseSend()
 		stream, err2 := conn.NewStream(ctx, raftStreamDesc, "/raft.Raft/Stream", grpc.ForceCodec(rawCodec{}))
 		if err2 != nil {

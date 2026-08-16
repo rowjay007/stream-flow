@@ -31,7 +31,7 @@ func TestLocalOffloaderUploadDownload(t *testing.T) {
 	if string(b) != content {
 		t.Fatalf("unexpected content: %s", string(b))
 	}
-	// ensure file exists on disk
+
 	p := dir + "/" + bucket + "/" + key
 	if _, err := os.Stat(p); err != nil {
 		t.Fatal(err)

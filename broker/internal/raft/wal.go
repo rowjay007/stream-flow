@@ -14,14 +14,11 @@ import (
 	"time"
 )
 
-// walStorage is a simple append-only WAL implementation storing entries
-// in a single file named wal.log and snapshots as snapshot.<id>.snap
 type walStorage struct {
 	dir     string
 	offload storage.Offloader
 }
 
-// NewWALStorage creates a WAL storage rooted at dir.
 func NewWALStorage(dir string, off storage.Offloader) (Storage, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -42,15 +39,15 @@ func (w *walStorage) SaveSnapshot(r io.Reader) (string, error) {
 	if _, err := io.Copy(f, r); err != nil {
 		return "", err
 	}
-	// If configured, offload snapshot to external store.
+
 	if w.offload != nil {
-		// reopen file for read
+
 		rf, err := os.Open(path)
 		if err == nil {
 			defer rf.Close()
-			// upload with bucket "snapshots" and key as filename
+
 			if _, err := w.offload.Upload(context.Background(), "snapshots", filepath.Base(path), rf, -1); err != nil {
-				// non-fatal: log and continue
+
 			}
 		}
 	}
@@ -58,7 +55,7 @@ func (w *walStorage) SaveSnapshot(r io.Reader) (string, error) {
 }
 
 func (w *walStorage) LoadSnapshot() (io.ReadCloser, error) {
-	// Find latest snapshot by lexicographic order of snapshot.*.snap
+
 	entries, err := os.ReadDir(w.dir)
 	if err != nil {
 		return nil, err
@@ -73,18 +70,18 @@ func (w *walStorage) LoadSnapshot() (io.ReadCloser, error) {
 		}
 	}
 	if latest == "" {
-		// If no local snapshot but offload is configured, try to fetch latest from offload
+
 		if w.offload != nil {
 			keys, err := w.offload.List(context.Background(), "snapshots", "snapshot.")
 			if err == nil && len(keys) > 0 {
-				// pick lexicographically last
+
 				latestKey := keys[0]
 				for _, k := range keys {
 					if k > latestKey {
 						latestKey = k
 					}
 				}
-				// download and save locally
+
 				rc, err := w.offload.Download(context.Background(), "snapshots", latestKey)
 				if err == nil {
 					defer rc.Close()
@@ -108,8 +105,7 @@ func (w *walStorage) AppendWAL(entries []byte) error {
 		return err
 	}
 	defer f.Close()
-	// Write length-prefixed data (uint32 big endian)
-	// For simplicity, write raw bytes preceded by 4-byte length.
+
 	l := uint32(len(entries))
 	hdr := []byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}
 	if _, err := f.Write(hdr); err != nil {
@@ -122,7 +118,7 @@ func (w *walStorage) AppendWAL(entries []byte) error {
 }
 
 func (w *walStorage) ReadWAL(fromIndex uint64) ([]byte, error) {
-	// Read all wal files (rotated and current) in lexicographic order
+
 	entries, err := os.ReadDir(w.dir)
 	if err != nil {
 		return nil, err
@@ -141,8 +137,7 @@ func (w *walStorage) ReadWAL(fromIndex uint64) ([]byte, error) {
 	if len(files) == 0 {
 		return nil, nil
 	}
-	// decode length-prefixed append blocks and concatenate payload bytes
-	// so callers receive only marshaled raft entries.
+
 	var out []byte
 	for _, f := range files {
 		b, err := os.ReadFile(f)
@@ -169,7 +164,6 @@ func (w *walStorage) ReadWAL(fromIndex uint64) ([]byte, error) {
 	return out[fromIndex:], nil
 }
 
-// RotateWAL renames the current wal.log to wal.<timestamp>.log and starts a new wal.log file.
 func (w *walStorage) RotateWAL() error {
 	old := w.walPath()
 	if _, err := os.Stat(old); os.IsNotExist(err) {
@@ -180,7 +174,7 @@ func (w *walStorage) RotateWAL() error {
 	if err := os.Rename(old, newname); err != nil {
 		return err
 	}
-	// create fresh wal.log
+
 	f, err := os.OpenFile(old, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
@@ -188,7 +182,6 @@ func (w *walStorage) RotateWAL() error {
 	return f.Close()
 }
 
-// PurgeOldSnapshots keeps only the latest `keep` snapshots and deletes older ones.
 func (w *walStorage) PurgeOldSnapshots(keep int) error {
 	entries, err := os.ReadDir(w.dir)
 	if err != nil {
@@ -204,8 +197,7 @@ func (w *walStorage) PurgeOldSnapshots(keep int) error {
 	if len(snaps) <= keep {
 		return nil
 	}
-	// sort by name lexicographically (older first)
-	// entries already in directory order, use ioutil.ReadDir for sorted
+
 	files, err := ioutil.ReadDir(w.dir)
 	if err != nil {
 		return err
@@ -217,7 +209,7 @@ func (w *walStorage) PurgeOldSnapshots(keep int) error {
 			snapFiles = append(snapFiles, fi)
 		}
 	}
-	// delete older ones, keep latest `keep`
+
 	n := len(snapFiles)
 	for i := 0; i < n-keep; i++ {
 		os.Remove(filepath.Join(w.dir, snapFiles[i].Name()))
@@ -225,9 +217,6 @@ func (w *walStorage) PurgeOldSnapshots(keep int) error {
 	return nil
 }
 
-// Compact truncates WAL entries up to the provided index (inclusive).
-// Entries with Index > compactIndex are preserved. This rewrites the current
-// wal.log with the remaining entries and removes rotated WAL files.
 func (w *walStorage) Compact(compactIndex uint64) error {
 	data, err := w.ReadWAL(0)
 	if err != nil {
@@ -252,12 +241,12 @@ func (w *walStorage) Compact(compactIndex uint64) error {
 			}
 			continue
 		}
-		// Fallback for tests/fixtures that encode entries without index metadata.
+
 		if uint64(i+1) > compactIndex {
 			keep = append(keep, e)
 		}
 	}
-	// marshal remaining entries and overwrite wal.log
+
 	b, err := marshalEntries(keep)
 	if err != nil {
 		return err
@@ -267,7 +256,7 @@ func (w *walStorage) Compact(compactIndex uint64) error {
 		return err
 	}
 	defer f.Close()
-	// write block header + payload (keeps same format as AppendWAL)
+
 	l := uint32(len(b))
 	hdr := []byte{byte(l >> 24), byte(l >> 16), byte(l >> 8), byte(l)}
 	if _, err := f.Write(hdr); err != nil {
@@ -276,7 +265,7 @@ func (w *walStorage) Compact(compactIndex uint64) error {
 	if _, err := f.Write(b); err != nil {
 		return err
 	}
-	// remove rotated wal.*.log files
+
 	entries, err := os.ReadDir(w.dir)
 	if err == nil {
 		for _, e := range entries {
@@ -289,5 +278,4 @@ func (w *walStorage) Compact(compactIndex uint64) error {
 	return nil
 }
 
-// timeNowUnixNano is a testable wrapper for time.Now().UnixNano().
 func timeNowUnixNano() int64 { return time.Now().UnixNano() }

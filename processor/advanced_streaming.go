@@ -5,13 +5,11 @@ import (
 	"time"
 )
 
-// TimedRecord is a Record annotated with event-time.
 type TimedRecord struct {
 	At     time.Time
 	Record Record
 }
 
-// TumblingWindows groups records into non-overlapping windows.
 func TumblingWindows(in []TimedRecord, size time.Duration) map[time.Time][]Record {
 	out := make(map[time.Time][]Record)
 	for _, tr := range in {
@@ -21,7 +19,6 @@ func TumblingWindows(in []TimedRecord, size time.Duration) map[time.Time][]Recor
 	return out
 }
 
-// SlidingWindows groups records into overlapping windows.
 func SlidingWindows(in []TimedRecord, size, slide time.Duration) map[time.Time][]Record {
 	out := make(map[time.Time][]Record)
 	if len(in) == 0 {
@@ -41,7 +38,6 @@ func SlidingWindows(in []TimedRecord, size, slide time.Duration) map[time.Time][
 	return out
 }
 
-// SessionWindows groups records by idle gap threshold.
 func SessionWindows(in []TimedRecord, gap time.Duration) [][]Record {
 	if len(in) == 0 {
 		return nil
@@ -62,7 +58,6 @@ func SessionWindows(in []TimedRecord, gap time.Duration) [][]Record {
 	return out
 }
 
-// WatermarkGenerator emits watermark as maxEventTime minus allowed lateness.
 type WatermarkGenerator struct {
 	AllowedLateness time.Duration
 	maxEvent        time.Time
@@ -75,7 +70,6 @@ func (w *WatermarkGenerator) Observe(ts time.Time) time.Time {
 	return w.maxEvent.Add(-w.AllowedLateness)
 }
 
-// LateDataResult models RETRACT+UPSERT-like behavior for late events.
 type LateDataResult struct {
 	RetractKey string
 	UpsertKey  string
@@ -85,7 +79,6 @@ func ApplyLateDataPipeline(primaryKey string) LateDataResult {
 	return LateDataResult{RetractKey: primaryKey + ":retract", UpsertKey: primaryKey + ":upsert"}
 }
 
-// CEPStateMachine detects a simple ordered sequence of event types.
 type CEPStateMachine struct {
 	Pattern []string
 	idx     int
@@ -114,7 +107,6 @@ func (c *CEPStateMachine) Next(event string) bool {
 	return false
 }
 
-// StreamJoinWithin joins two streams by key when timestamps are within bound.
 func StreamJoinWithin(left, right []TimedRecord, key string, bound time.Duration) []Record {
 	out := make([]Record, 0)
 	for _, l := range left {

@@ -2,7 +2,6 @@ package window
 
 import "sync"
 
-// WindowManager is a tiny placeholder implementation used for initial integration tests.
 type WindowManager struct {
 	mu      sync.Mutex
 	running bool

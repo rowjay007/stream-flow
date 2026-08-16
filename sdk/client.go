@@ -11,7 +11,6 @@ import (
 	"strings"
 )
 
-// Client is a lightweight HTTP SDK client for StreamFlow broker/management APIs.
 type Client struct {
 	baseURL    string
 	httpClient *http.Client

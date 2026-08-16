@@ -5,8 +5,6 @@ import (
 	"os"
 )
 
-// sendFileFallback copies data from file to writer. On Linux this
-// can be replaced by a zero-copy syscall.Sendfile implementation.
 func sendFileFallback(w io.Writer, f *os.File, off int64, count int64) (int64, error) {
 	if _, err := f.Seek(off, 0); err != nil {
 		return 0, err

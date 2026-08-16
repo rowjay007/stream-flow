@@ -63,8 +63,7 @@ func (r *AdvancedRegistry) Latest(name string) (SchemaVersion, bool) {
 }
 
 func isBackwardCompatible(oldSchema, newSchema string) bool {
-	// Minimal backward-compat check: new schema must contain old schema text.
-	// This keeps API behavior deterministic while allowing stricter validators later.
+
 	if oldSchema == "" {
 		return true
 	}

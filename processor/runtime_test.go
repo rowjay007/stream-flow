@@ -6,25 +6,24 @@ import (
 
 func TestProcessorPipeline(t *testing.T) {
 	in := make(chan Record)
-	// map: add field "x2" = x * 2
+
 	mapOp := &MapOperator{Fn: func(r Record) Record {
 		x, _ := r["x"].(int)
 		r2 := Record{"x2": x * 2, "group": r["group"]}
 		return r2
 	}}
-	// filter: only even x2
+
 	filt := &FilterOperator{Pred: func(r Record) bool {
 		v, _ := r["x2"].(int)
 		return v%2 == 0
 	}}
-	// aggregate by group
+
 	agg := &AggregateOperator{Key: "group"}
 
 	rt := NewRuntime(mapOp, filt, agg)
 
 	outCh := rt.Run(in)
 
-	// send inputs
 	go func() {
 		defer close(in)
 		in <- Record{"x": 1, "group": "a"}

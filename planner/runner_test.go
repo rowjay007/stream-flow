@@ -9,7 +9,7 @@ import (
 )
 
 func TestRunDistributed(t *testing.T) {
-	// start two processor servers
+
 	s1, l1, err := processor.StartProcessorServer("127.0.0.1:0", "", "")
 	if err != nil {
 		t.Fatal(err)

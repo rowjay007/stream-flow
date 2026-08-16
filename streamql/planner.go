@@ -11,12 +11,11 @@ type Plan struct {
 	WindowMs    int
 }
 
-// Planify converts a Query AST into a simple physical plan.
 func Planify(q *Query) *Plan {
 	if q == nil {
 		return nil
 	}
-	// detect simple aggregates in select list
+
 	var aggs []string
 	for _, s := range q.Select {
 		ls := strings.ToLower(s)

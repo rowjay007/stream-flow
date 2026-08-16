@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-// Node wraps the etcd/raft Node and provides lifecycle methods. This is a
-// minimal implementation to start an in-memory raft node for local testing.
 type Node struct {
 	id        uint64
 	store     Storage
@@ -28,17 +26,13 @@ type Node struct {
 	peerAddrs map[uint64]string
 }
 
-// NewNode constructs a Node. It uses the provided Storage and Transport
-// but currently initializes an in-memory raft storage for demo purposes.
 func NewNode(id uint64, store Storage, tr Transport) *Node {
 	log.Printf("raft: create node id=%d", id)
 	return &Node{id: id, store: store, tr: tr, stopc: make(chan struct{})}
 }
 
 func (n *Node) Start(ctx context.Context) error {
-	// Create an in-memory storage for the raft state machine. In Phase 2
-	// we will wire this to durable WAL + snapshot storage backed by
-	// broker segment files.
+
 	mem := raftlib.NewMemoryStorage()
 	var storage raftlib.Storage = mem
 	var appendable interface {
@@ -46,17 +40,15 @@ func (n *Node) Start(ctx context.Context) error {
 		ApplySnapshot(raftpb.Snapshot) error
 	} = mem
 
-	// If we have a persistent store, load snapshot (if present) and wrap
-	// the memory storage so Append persists entries to the WAL as raft produces them.
 	if n.store != nil {
-		// Load snapshot and apply to memory storage before replaying WAL
+
 		if rc, err := n.store.LoadSnapshot(); err == nil && rc != nil {
-			// Read entire snapshot and apply
+
 			var snapBytes []byte
 			snapBytes, _ = io.ReadAll(rc)
 			rc.Close()
 			if len(snapBytes) > 0 {
-				// create a dummy Snapshot with Data set to snapBytes
+
 				var s raftpb.Snapshot
 				s.Data = snapBytes
 				_ = mem.ApplySnapshot(s)
@@ -64,7 +56,7 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 		if data, err := n.store.ReadWAL(0); err == nil && len(data) > 0 {
 			if ents, err := unmarshalEntries(data); err == nil && len(ents) > 0 {
-				// Create persistent memory wrapper and populate with loaded ents
+
 				pm := newPersistentMemory(mem, n.store)
 				storage = pm
 				appendable = pm
@@ -82,14 +74,12 @@ func (n *Node) Start(ctx context.Context) error {
 		MaxInflightMsgs: 256,
 	}
 
-	// Start a single-node cluster for now.
 	peers := n.peers
 	if len(peers) == 0 {
 		peers = []raftlib.Peer{{ID: n.id}}
 	}
 	n.node = raftlib.StartNode(&cfg, peers)
 
-	// etcd/raft requires external ticking to drive elections/heartbeats.
 	go func() {
 		ticker := time.NewTicker(100 * time.Millisecond)
 		defer ticker.Stop()
@@ -103,8 +93,6 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 	}()
 
-	// If using an in-process transport, register a receive channel so
-	// other nodes can send messages directly to this node.
 	if ipt, ok := n.tr.(*InProcTransport); ok {
 		addr := fmt.Sprintf("%d", n.id)
 		ch, err := ipt.Register(addr)
@@ -121,8 +109,6 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 	}
 
-	// If using a gRPC transport, register a handler that steps incoming
-	// raft messages into this node.
 	if gt, ok := n.tr.(*GRPCTransport); ok {
 		gt.RegisterHandler(func(b []byte) error {
 			var m raftpb.Message
@@ -139,15 +125,13 @@ func (n *Node) Start(ctx context.Context) error {
 			case <-n.stopc:
 				return
 			case rd := <-n.node.Ready():
-				// Apply snapshot if present.
+
 				if !raftlib.IsEmptySnap(rd.Snapshot) {
 					_ = appendable.ApplySnapshot(rd.Snapshot)
 				}
-				// Persist entries to WAL (if configured) and append to
-				// in-memory storage so raft can proceed.
+
 				if len(rd.Entries) > 0 {
-					// Persist entries to WAL (if configured) and append to
-					// in-memory storage so raft can proceed.
+
 					if n.store != nil {
 						if b, err := marshalEntries(rd.Entries); err == nil {
 							_ = n.store.AppendWAL(b)
@@ -155,8 +139,7 @@ func (n *Node) Start(ctx context.Context) error {
 					}
 					_ = appendable.Append(rd.Entries)
 				}
-				// Send raft messages over the transport to peers. Use
-				// peerAddrs mapping to resolve raft node IDs to addresses.
+
 				for _, m := range rd.Messages {
 					if n.tr == nil {
 						continue
@@ -168,20 +151,14 @@ func (n *Node) Start(ctx context.Context) error {
 								addr = a
 							}
 						}
-						// attach node id metadata
+
 						ctxWithMeta := metadata.AppendToOutgoingContext(ctx, "node", fmt.Sprintf("%d", n.id))
 						_ = n.tr.Send(ctxWithMeta, addr, b)
 					}
 				}
 
-				// Snapshot policy: create a simple snapshot periodically.
-				// For demo purposes, create a snapshot after a modest number of entries.
-				// Track entries via Ready's Entries length; use a simple static threshold.
 				const snapshotThreshold = 50
-				// Use a small, per-node counter stored in the Node (via closure variable).
-				// NOTE: entriesSinceSnapshot is a closure var; initialize via a map keyed by node id could be used
-				// but for simplicity we keep a local static counter variable using time check as well.
-				// Here we create a snapshot whenever there are entries >= snapshotThreshold.
+
 				if n.store != nil && len(rd.Entries) >= snapshotThreshold {
 					snap := map[string]interface{}{
 						"node_id":   n.id,
@@ -191,13 +168,12 @@ func (n *Node) Start(ctx context.Context) error {
 					if err := json.NewEncoder(&buf).Encode(snap); err == nil {
 						if id, err := n.store.SaveSnapshot(&buf); err == nil {
 							log.Printf("raft: saved snapshot %s for node %d", id, n.id)
-							// After saving snapshot, request compaction which rotates WAL and purges old snapshots.
+
 							_ = n.Compact(0)
 						}
 					}
 				}
 
-				// Advance the node to acknowledge the Ready has been processed.
 				n.node.Advance()
 			}
 		}
@@ -218,7 +194,6 @@ func (n *Node) Stop() error {
 	return nil
 }
 
-// Propose is a convenience to propose a command to the raft node.
 func (n *Node) Propose(ctx context.Context, data []byte) error {
 	if n.node == nil {
 		return nil
@@ -227,14 +202,13 @@ func (n *Node) Propose(ctx context.Context, data []byte) error {
 	return nil
 }
 
-// Compact the in-memory storage up to the given index (demo helper).
 func (n *Node) Compact(index uint64) error {
-	// If the underlying Storage supports WAL compaction and snapshot purging, call them.
+
 	if ws, ok := n.store.(*walStorage); ok {
 		if err := ws.Compact(index); err != nil {
 			return err
 		}
-		// rotate WAL and purge old snapshots, keep last 2
+
 		if err := ws.RotateWAL(); err != nil {
 			return err
 		}

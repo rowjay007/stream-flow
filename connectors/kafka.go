@@ -2,7 +2,6 @@ package connectors
 
 import "streamflow/processor"
 
-// KafkaBridgeConnector is a built-in connector surface for Kafka bridge integrations.
 type KafkaBridgeConnector struct {
 	SourceTopic string
 	SinkTopic   string

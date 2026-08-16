@@ -32,7 +32,6 @@ func TestFetchRawAndSendFileFallback(t *testing.T) {
 		t.Fatalf("fetch raw: %v", err)
 	}
 
-	// Read exact payload and verify JSON unmarshals to a Record with same Offset.
 	payload := make([]byte, length)
 	if _, err := f.ReadAt(payload, pos); err != nil {
 		t.Fatalf("read payload: %v", err)
@@ -45,7 +44,6 @@ func TestFetchRawAndSendFileFallback(t *testing.T) {
 		t.Fatalf("offset mismatch: got %d want %d", out.Offset, rec.Offset)
 	}
 
-	// Test SendFile fallback copies bytes into a buffer.
 	var buf bytes.Buffer
 	if _, err := SendFile(&buf, f, pos, length); err != nil {
 		t.Fatalf("sendfile fallback: %v", err)
@@ -78,17 +76,15 @@ func TestSegmentIndexLoad(t *testing.T) {
 		}
 	}
 
-	// locate segment path
 	t0 := br.topics["orders"]
 	seg := t0.Segments[0]
 	path := seg.Path
 
-	// create new segment from same path and ensure offsets loaded
 	s2, err := newSegment(path, 0)
 	if err != nil {
 		t.Fatalf("newSegment: %v", err)
 	}
-	// allow tiny delay for persistIndexes to flush
+
 	time.Sleep(10 * time.Millisecond)
 	if len(s2.offsets) == 0 {
 		t.Fatalf("expected offsets loaded, got 0")

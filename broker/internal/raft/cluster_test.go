@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-// TestNodeProposePersistsWAL is a deterministic smoke test for raft persistence.
-// Multi-node elections are covered by dedicated transport/integration tests.
 func TestNodeProposePersistsWAL(t *testing.T) {
 	dir, err := os.MkdirTemp("", "raftnode")
 	if err != nil {
@@ -28,7 +26,6 @@ func TestNodeProposePersistsWAL(t *testing.T) {
 	}
 	defer n.Stop()
 
-	// Allow initial election to settle for the single-node cluster.
 	time.Sleep(200 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

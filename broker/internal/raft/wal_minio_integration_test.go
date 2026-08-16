@@ -11,9 +11,6 @@ import (
 	"streamflow/broker/storage"
 )
 
-// This integration test requires a running MinIO/S3-compatible endpoint and
-// the following environment variables set: MINIO_ENDPOINT, MINIO_ACCESS_KEY,
-// MINIO_SECRET_KEY, MINIO_BUCKET. The test will skip if those are not set.
 func TestWALMinIOIntegration(t *testing.T) {
 	endpoint := os.Getenv("MINIO_ENDPOINT")
 	access := os.Getenv("MINIO_ACCESS_KEY")
@@ -39,7 +36,6 @@ func TestWALMinIOIntegration(t *testing.T) {
 		t.Fatalf("save snapshot: %v", err)
 	}
 
-	// remove local snap to force offload restore
 	entries, _ := os.ReadDir(filepath.Join(tmp, "wal"))
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), "snapshot.") {
@@ -60,7 +56,6 @@ func TestWALMinIOIntegration(t *testing.T) {
 		t.Fatalf("unexpected snapshot content: %s", string(b))
 	}
 
-	// cleanup: try to remove object from bucket (best-effort)
 	_ = off
 	_ = context.Background()
 }

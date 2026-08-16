@@ -4,7 +4,6 @@ import "errors"
 
 var ErrRocksDBNotEnabled = errors.New("rocksdb state store requires -tags rocksdb")
 
-// StateStore abstracts state persistence for per-partition processing state.
 type StateStore interface {
 	Put(key, value []byte) error
 	Get(key []byte) ([]byte, error)

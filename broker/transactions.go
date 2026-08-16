@@ -114,8 +114,6 @@ func (b *Broker) AbortTransaction(txID string) error {
 	return nil
 }
 
-// ConsumeReadCommitted returns committed data only. Since uncommitted records
-// never enter segment logs in this implementation, it aliases Consume.
 func (b *Broker) ConsumeReadCommitted(topicName string, fromOffset int64, max int) ([]Record, error) {
 	return b.Consume(topicName, fromOffset, max)
 }

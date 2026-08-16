@@ -7,17 +7,12 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// walAdapter adapts our simple WAL Storage to the etcd/raft Storage interface
-// used by the raft state machine. It is read-only: writing still happens via
-// AppendWAL called from the Node Ready loop.
 type walAdapter struct {
 	store Storage
 	mu    sync.Mutex
 	ents  []raftpb.Entry
 }
 
-// NewEtcdStorageAdapter builds an adapter by reading the WAL and unmarshalling
-// entries into memory for the raft library to consume via the Storage API.
 func NewEtcdStorageAdapter(s Storage) (raftlib.Storage, error) {
 	a := &walAdapter{store: s}
 	if data, err := s.ReadWAL(0); err == nil && len(data) > 0 {

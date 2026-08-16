@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// generateCA creates a self-signed CA certificate and returns cert PEM and private key.
 func generateCA() ([]byte, *rsa.PrivateKey, error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -34,11 +33,10 @@ func generateCA() ([]byte, *rsa.PrivateKey, error) {
 	return certPEM, key, nil
 }
 
-// generateCertForHost issues a cert signed by caKey for the given host
 func generateCertForHost(caCertPEM []byte, caKey *rsa.PrivateKey, host string) ([]byte, []byte, error) {
 	ca, err := x509.ParseCertificate(caCertPEMToDER(caCertPEM))
 	if err != nil {
-		// fallback: parse via PEM
+
 		block, _ := pem.Decode(caCertPEM)
 		ca, err = x509.ParseCertificate(block.Bytes)
 		if err != nil {
