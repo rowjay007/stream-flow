@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -74,20 +73,52 @@ func newSegment(path string, startOffset int64) (*Segment, error) {
 	}
 	seg.position = fileInfo.Size()
 
-	// Load existing index file into memory for O(1) lookups in the
-	// single-node implementation. This provides equivalent behavior
-	// to a memory-mapped sparse index for Phase 1.
-	if err := seg.loadIndex(); err != nil {
-		return nil, fmt.Errorf("load index: %w", err)
-	}
-
 	idx, err := os.OpenFile(seg.IndexPath, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open index: %w", err)
 	}
 	seg.IndexFile = idx
 
+	if err := seg.loadIndexes(); err != nil {
+		return nil, fmt.Errorf("load indexes: %w", err)
+	}
+	if seg.nextOffset < startOffset {
+		seg.nextOffset = startOffset
+	}
+
 	return seg, nil
+}
+
+func (s *Segment) loadIndexes() error {
+	data, err := os.ReadFile(s.IndexPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for i := 0; i+16 <= len(data); i += 16 {
+		off := bytesToInt64(data[i : i+8])
+		pos := bytesToInt64(data[i+8 : i+16])
+		s.offsets[off] = pos
+		if off >= s.nextOffset {
+			s.nextOffset = off + 1
+		}
+	}
+
+	timeData, err := os.ReadFile(s.TimeIndex)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for i := 0; i+16 <= len(timeData); i += 16 {
+		ts := bytesToInt64(timeData[i : i+8])
+		off := bytesToInt64(timeData[i+8 : i+16])
+		s.timeOffsets[ts] = off
+	}
+	return nil
 }
 
 func (s *Segment) Append(record Record) (int64, error) {
@@ -207,78 +238,6 @@ func (s *Segment) persistIndexes() error {
 	return os.WriteFile(s.TimeIndex, timeBuf, 0o644)
 }
 
-func (s *Segment) loadIndex() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Try memory-mapping the index file for fast lookups.
-	f, err := os.Open(s.IndexPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	defer f.Close()
-
-	stat, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	size := stat.Size()
-	if size == 0 {
-		return nil
-	}
-	// Ensure size is multiple of 16
-	if size%16 != 0 {
-		return fmt.Errorf("corrupt index file")
-	}
-
-	// Map the file into memory.
-	data, err := syscall.Mmap(int(f.Fd()), 0, int(size), syscall.PROT_READ, syscall.MAP_SHARED)
-	if err == nil {
-		defer syscall.Munmap(data)
-		s.offsets = make(map[int64]int64, size/16)
-		maxOffset := s.nextOffset
-		for i := 0; i < len(data); i += 16 {
-			off := bytesToInt64(data[i : i+8])
-			pos := bytesToInt64(data[i+8 : i+16])
-			s.offsets[off] = pos
-			if off >= maxOffset {
-				maxOffset = off + 1
-			}
-		}
-		s.nextOffset = maxOffset
-		return nil
-	}
-
-	// Fallback to reading the file into memory.
-	data2, err := os.ReadFile(s.IndexPath)
-	if err != nil {
-		return err
-	}
-	s.offsets = make(map[int64]int64, len(data2)/16)
-	maxOffset := s.nextOffset
-	for i := 0; i < len(data2); i += 16 {
-		off := bytesToInt64(data2[i : i+8])
-		pos := bytesToInt64(data2[i+8 : i+16])
-		s.offsets[off] = pos
-		if off >= maxOffset {
-			maxOffset = off + 1
-		}
-	}
-	s.nextOffset = maxOffset
-	return nil
-}
-
-func bytesToInt64(b []byte) int64 {
-	var v int64
-	for i := 0; i < 8; i++ {
-		v = (v << 8) | int64(b[i])
-	}
-	return v
-}
-
 type indexEntry struct {
 	Offset   int64
 	Position int64
@@ -309,6 +268,14 @@ func int64ToBytes(v int64) []byte {
 		b[i] = byte(v >> (8 * (7 - i)))
 	}
 	return b
+}
+
+func bytesToInt64(b []byte) int64 {
+	var v int64
+	for i := 0; i < 8 && i < len(b); i++ {
+		v = (v << 8) | int64(b[i])
+	}
+	return v
 }
 
 func min(a, b int) int {

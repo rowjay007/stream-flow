@@ -2,13 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
-
+	"strconv"
 	"streamflow/broker"
 )
 
@@ -26,24 +24,37 @@ func main() {
 		panic(err)
 	}
 
+	type produceReq struct {
+		Topic   string            `json:"topic"`
+		Key     string            `json:"key"`
+		Value   string            `json:"value"`
+		Headers map[string]string `json:"headers,omitempty"`
+	}
+
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 
 	http.HandleFunc("/produce", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "method", http.StatusMethodNotAllowed)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var req struct {
-			Topic   string            `json:"topic"`
-			Key     string            `json:"key"`
-			Value   string            `json:"value"`
-			Headers map[string]string `json:"headers"`
-		}
+		defer r.Body.Close()
+
+		var req produceReq
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		if req.Topic == "" {
+			http.Error(w, "topic is required", http.StatusBadRequest)
+			return
+		}
+
+		if _, err := br.CreateTopic(req.Topic); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		rec, err := br.Produce(req.Topic, []byte(req.Key), []byte(req.Value), req.Headers)
@@ -51,27 +62,45 @@ func main() {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(rec)
 	})
 
 	http.HandleFunc("/consume", func(w http.ResponseWriter, r *http.Request) {
-		topic := r.URL.Query().Get("topic")
-		if topic == "" {
-			http.Error(w, "missing topic", http.StatusBadRequest)
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		topic := r.URL.Query().Get("topic")
+		if topic == "" {
+			http.Error(w, "topic is required", http.StatusBadRequest)
+			return
+		}
+
 		offset := int64(0)
-		max := 100
 		if v := r.URL.Query().Get("offset"); v != "" {
-			fmt.Sscanf(v, "%d", &offset)
+			parsed, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				http.Error(w, "invalid offset", http.StatusBadRequest)
+				return
+			}
+			offset = parsed
 		}
+
+		max := 100
 		if v := r.URL.Query().Get("max"); v != "" {
-			fmt.Sscanf(v, "%d", &max)
+			parsed, err := strconv.Atoi(v)
+			if err != nil || parsed <= 0 {
+				http.Error(w, "invalid max", http.StatusBadRequest)
+				return
+			}
+			max = parsed
 		}
+
 		recs, err := br.Consume(topic, offset, max)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -79,14 +108,24 @@ func main() {
 	})
 
 	http.HandleFunc("/fetchraw", func(w http.ResponseWriter, r *http.Request) {
-		topic := r.URL.Query().Get("topic")
-		if topic == "" {
-			http.Error(w, "missing topic", http.StatusBadRequest)
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var offset int64
-		if v := r.URL.Query().Get("offset"); v != "" {
-			fmt.Sscanf(v, "%d", &offset)
+		topic := r.URL.Query().Get("topic")
+		if topic == "" {
+			http.Error(w, "topic is required", http.StatusBadRequest)
+			return
+		}
+		offsetStr := r.URL.Query().Get("offset")
+		if offsetStr == "" {
+			http.Error(w, "offset is required", http.StatusBadRequest)
+			return
+		}
+		offset, err := strconv.ParseInt(offsetStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid offset", http.StatusBadRequest)
+			return
 		}
 
 		f, pos, length, err := br.FetchRaw(topic, offset)
@@ -94,69 +133,17 @@ func main() {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
-
-		// Try to hijack the connection to get at the underlying socket for
-		// zero-copy sendfile. If hijack fails, fallback to copying into
-		// the HTTP response normally.
-		hj, ok := w.(http.Hijacker)
-		if !ok {
-			// No hijack support, fallback.
-			// Simple read-then-write fallback
-			payload := make([]byte, length)
-			if _, err := f.ReadAt(payload, pos); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			w.Header().Set("Content-Type", "application/octet-stream")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(payload)
-			return
-		}
-
-		conn, buf, err := hj.Hijack()
-		if err != nil {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
+		if _, err := broker.SendFile(w, f, pos, length); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer conn.Close()
-		// First write a minimal HTTP response header
-		_, _ = buf.WriteString("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n\r\n")
-		_ = buf.Flush()
-
-		// Attempt zero-copy sendfile using the connection's file descriptor.
-		// Obtain an *os.File for the connection via Conn's File() when possible.
-		var connFile *os.File
-		if tcp, ok := conn.(*net.TCPConn); ok {
-			if file, ferr := tcp.File(); ferr == nil {
-				connFile = file
-			}
-		}
-		if connFile == nil {
-			// Fallback: read-then-write
-			payload := make([]byte, length)
-			if _, err := f.ReadAt(payload, pos); err != nil {
-				return
-			}
-			_, _ = conn.Write(payload)
-			return
-		}
-
-		// Use broker.SendFile helper which is platform-aware.
-		if _, err := broker.SendFile(connFile, f, pos, length); err != nil {
-			// On failure, fallback to copy
-			payload := make([]byte, length)
-			if _, err := f.ReadAt(payload, pos); err != nil {
-				return
-			}
-			_, _ = conn.Write(payload)
 			return
 		}
 	})
 
 	addr := ":9092"
-	if p := os.Getenv("PORT"); p != "" {
-		addr = ":" + p
+	log.Printf("broker listening on %s (dir=%s)", addr, workDir)
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		panic(err)
 	}
-	log.Printf("broker listening on %s (data dir=%s)", addr, workDir)
-	log.Fatal(http.ListenAndServe(addr, nil))
 }

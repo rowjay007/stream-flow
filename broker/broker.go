@@ -1,43 +1,26 @@
 package broker
 
 import (
-	"context"
 	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
-
-	raftint "streamflow/broker/internal/raft"
 )
 
 // Broker implements the single-node broker foundation described in Phase 1.
 type Broker struct {
-	dir      string
-	mu       sync.RWMutex
-	topics   map[string]*Topic
-	raftNode *raftint.Node
+	dir    string
+	mu     sync.RWMutex
+	topics map[string]*Topic
 }
 
 func NewBroker(dir string) (*Broker, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	b := &Broker{dir: dir, topics: make(map[string]*Topic)}
-
-	// Initialize WAL-backed storage for Raft and start a local node for Phase 2.
-	raftDir := filepath.Join(dir, "raft")
-	store, err := raftint.NewWALStorage(raftDir)
-	if err == nil {
-		tr := raftint.NewInMemoryTransport()
-		node := raftint.NewNode(1, store, tr)
-		if err := node.Start(context.Background()); err == nil {
-			b.raftNode = node
-		}
-	}
-
-	return b, nil
+	return &Broker{dir: dir, topics: make(map[string]*Topic)}, nil
 }
 
 func (b *Broker) CreateTopic(name string) (*Topic, error) {
@@ -142,10 +125,8 @@ func (b *Broker) Fetch(topicName string, fromOffset int64, maxBytes int64) ([]Re
 	return acc, nil
 }
 
-// FetchRaw returns an open file handle positioned at the payload start, the
-// payload offset within the file, and the payload length for a single record
-// referenced by topicName and offset. Caller must NOT close the returned
-// *os.File (it is owned by the segment).
+// FetchRaw returns the underlying log file and payload position/length for the
+// record at offset. Callers can use SendFile for a zero-copy transfer path.
 func (b *Broker) FetchRaw(topicName string, offset int64) (*os.File, int64, int64, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -155,22 +136,24 @@ func (b *Broker) FetchRaw(topicName string, offset int64) (*os.File, int64, int6
 		return nil, 0, 0, fmt.Errorf("topic %q not found", topicName)
 	}
 
-	// Find the segment containing the offset.
 	for _, seg := range topic.Segments {
 		seg.mu.Lock()
-		pos, ok := seg.offsets[offset]
-		seg.mu.Unlock()
-		if !ok {
+		pos, exists := seg.offsets[offset]
+		if !exists {
+			seg.mu.Unlock()
 			continue
 		}
-		// Read the length prefix.
+
 		var sizeBuf [4]byte
 		if _, err := seg.LogFile.ReadAt(sizeBuf[:], pos); err != nil {
+			seg.mu.Unlock()
 			return nil, 0, 0, fmt.Errorf("read payload length: %w", err)
 		}
 		length := int64(binary.BigEndian.Uint32(sizeBuf[:]))
+		seg.mu.Unlock()
 		return seg.LogFile, pos + 4, length, nil
 	}
+
 	return nil, 0, 0, fmt.Errorf("offset %d not found", offset)
 }
 
