@@ -3,10 +3,12 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"streamflow/broker"
@@ -95,5 +97,34 @@ func TestProduceConsumeAndOffsets(t *testing.T) {
 	}
 	if off["offset"].(float64) != 1 {
 		t.Fatalf("unexpected offset response: %#v", off)
+	}
+}
+
+func TestMetricsEndpoint(t *testing.T) {
+	h := newTestServer(t)
+
+	healthReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	healthRec := httptest.NewRecorder()
+	h.ServeHTTP(healthRec, healthReq)
+	if healthRec.Code != http.StatusOK {
+		t.Fatalf("health status: got=%d", healthRec.Code)
+	}
+
+	metricsReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	metricsRec := httptest.NewRecorder()
+	h.ServeHTTP(metricsRec, metricsReq)
+	if metricsRec.Code != http.StatusOK {
+		t.Fatalf("metrics status: got=%d", metricsRec.Code)
+	}
+	body, err := io.ReadAll(metricsRec.Body)
+	if err != nil {
+		t.Fatalf("read metrics body: %v", err)
+	}
+	s := string(body)
+	if !strings.Contains(s, "streamflow_management_http_requests_total") {
+		t.Fatalf("missing custom request metric")
+	}
+	if !strings.Contains(s, "streamflow_management_http_request_duration_seconds") {
+		t.Fatalf("missing custom duration metric")
 	}
 }

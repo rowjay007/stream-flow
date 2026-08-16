@@ -4,8 +4,35 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"sync"
+	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"streamflow/broker"
+)
+
+var (
+	metricsOnce sync.Once
+	reqTotal    = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "streamflow",
+			Subsystem: "management",
+			Name:      "http_requests_total",
+			Help:      "Total number of HTTP requests handled by the management API.",
+		},
+		[]string{"method", "path", "status"},
+	)
+	reqDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "streamflow",
+			Subsystem: "management",
+			Name:      "http_request_duration_seconds",
+			Help:      "Request duration in seconds for management API handlers.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"method", "path"},
+	)
 )
 
 // Server exposes management endpoints for topic lifecycle and data-plane checks.
@@ -14,18 +41,43 @@ type Server struct {
 }
 
 func NewServer(b *broker.Broker) *Server {
+	metricsOnce.Do(func() {
+		prometheus.MustRegister(reqTotal, reqDuration)
+	})
 	return &Server{broker: b}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/topics", s.handleTopics)
 	mux.HandleFunc("/produce", s.handleProduce)
 	mux.HandleFunc("/consume", s.handleConsume)
 	mux.HandleFunc("/offset/commit", s.handleCommitOffset)
 	mux.HandleFunc("/offset", s.handleOffset)
-	return mux
+	return withMetrics(mux)
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(statusCode int) {
+	r.status = statusCode
+	r.ResponseWriter.WriteHeader(statusCode)
+}
+
+func withMetrics(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		status := strconv.Itoa(rec.status)
+		reqTotal.WithLabelValues(r.Method, r.URL.Path, status).Inc()
+		reqDuration.WithLabelValues(r.Method, r.URL.Path).Observe(time.Since(start).Seconds())
+	})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
