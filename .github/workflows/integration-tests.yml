@@ -2,9 +2,9 @@ name: Raft Integration Tests
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   raft-integration:
@@ -14,7 +14,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: "1.23"
       - name: Run raft integration tests
         run: |
           go test ./broker/internal/raft -run TestSingleNodeRestart -v
