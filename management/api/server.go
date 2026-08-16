@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,13 +40,18 @@ var (
 // Server exposes management endpoints for topic lifecycle and data-plane checks.
 type Server struct {
 	broker *broker.Broker
+	apiKey string
 }
 
 func NewServer(b *broker.Broker) *Server {
+	return NewServerWithAPIKey(b, "")
+}
+
+func NewServerWithAPIKey(b *broker.Broker, apiKey string) *Server {
 	metricsOnce.Do(func() {
 		prometheus.MustRegister(reqTotal, reqDuration)
 	})
-	return &Server{broker: b}
+	return &Server{broker: b, apiKey: apiKey}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -56,7 +63,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/consume", s.handleConsume)
 	mux.HandleFunc("/offset/commit", s.handleCommitOffset)
 	mux.HandleFunc("/offset", s.handleOffset)
-	return withMetrics(mux)
+	mux.HandleFunc("/admin/drain", s.handleDrain)
+
+	var h http.Handler = mux
+	h = withAuth(h, s.apiKey)
+	h = withMetrics(h)
+	h = withAuditLog(h)
+	return h
 }
 
 type statusRecorder struct {
@@ -131,6 +144,10 @@ func (s *Server) handleProduce(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := s.broker.Produce(req.Topic, []byte(req.Key), []byte(req.Value), req.Headers)
 	if err != nil {
+		if err == broker.ErrDraining {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -215,8 +232,58 @@ func (s *Server) handleOffset(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"topic": topic, "group": group, "offset": off})
 }
 
+func (s *Server) handleDrain(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var req struct {
+		DurationSeconds int `json:"duration_seconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid drain payload", http.StatusBadRequest)
+		return
+	}
+	if req.DurationSeconds <= 0 || req.DurationSeconds > 3600 {
+		http.Error(w, "duration_seconds must be in range 1..3600", http.StatusBadRequest)
+		return
+	}
+
+	d := time.Duration(req.DurationSeconds) * time.Second
+	s.broker.Drain(d)
+	writeJSON(w, http.StatusOK, map[string]interface{}{"status": "draining", "duration_seconds": req.DurationSeconds})
+}
+
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func withAuth(next http.Handler, apiKey string) http.Handler {
+	if strings.TrimSpace(apiKey) == "" {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" || r.URL.Path == "/metrics" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if r.Header.Get("X-API-Key") != apiKey {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func withAuditLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		log.Printf("management request method=%s path=%s status=%d latency_ms=%d", r.Method, r.URL.Path, rec.status, time.Since(start).Milliseconds())
+	})
 }

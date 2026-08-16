@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -117,5 +118,39 @@ func BenchmarkBrokerProduce(b *testing.B) {
 		if _, err = br.Produce("bench", []byte("k"), []byte("v"), map[string]string{"source": "bench"}); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+func TestBrokerDrainRejectsProduce(t *testing.T) {
+	dir := filepath.Join(os.TempDir(), "streamflow-broker-drain-test")
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	br, err := NewBroker(dir)
+	if err != nil {
+		t.Fatalf("new broker: %v", err)
+	}
+	if _, err = br.CreateTopic("orders"); err != nil {
+		t.Fatalf("create topic: %v", err)
+	}
+
+	br.Drain(200 * time.Millisecond)
+	if !br.IsDraining() {
+		t.Fatalf("expected broker to be draining")
+	}
+
+	_, err = br.Produce("orders", []byte("k"), []byte("v"), nil)
+	if !errors.Is(err, ErrDraining) {
+		t.Fatalf("expected ErrDraining, got: %v", err)
+	}
+
+	time.Sleep(250 * time.Millisecond)
+	if br.IsDraining() {
+		t.Fatalf("expected broker drain mode to expire")
+	}
+	if _, err := br.Produce("orders", []byte("k"), []byte("v"), nil); err != nil {
+		t.Fatalf("produce after drain expiry: %v", err)
 	}
 }

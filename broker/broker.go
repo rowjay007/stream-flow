@@ -2,6 +2,7 @@ package broker
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,11 +11,14 @@ import (
 	"time"
 )
 
+var ErrDraining = errors.New("broker is draining")
+
 // Broker implements the single-node broker foundation described in Phase 1.
 type Broker struct {
-	dir    string
-	mu     sync.RWMutex
-	topics map[string]*Topic
+	dir          string
+	mu           sync.RWMutex
+	topics       map[string]*Topic
+	drainingTill time.Time
 }
 
 func NewBroker(dir string) (*Broker, error) {
@@ -69,6 +73,10 @@ func (b *Broker) Produce(topicName string, key, value []byte, headers map[string
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	if b.isDrainingLocked() {
+		return Record{}, ErrDraining
+	}
+
 	topic, ok := b.topics[topicName]
 	if !ok {
 		return Record{}, fmt.Errorf("topic %q not found", topicName)
@@ -90,6 +98,31 @@ func (b *Broker) Produce(topicName string, key, value []byte, headers map[string
 	record.Offset = offset
 	topic.NextOffset = offset + 1
 	return record, nil
+}
+
+// Drain marks the broker as draining for the specified duration and rejects
+// new produce requests during that interval.
+func (b *Broker) Drain(d time.Duration) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.drainingTill = time.Now().Add(d)
+}
+
+// IsDraining reports whether the broker is currently in drain mode.
+func (b *Broker) IsDraining() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.isDrainingLocked()
+}
+
+func (b *Broker) isDrainingLocked() bool {
+	if b.drainingTill.IsZero() {
+		return false
+	}
+	if time.Now().After(b.drainingTill) {
+		return false
+	}
+	return true
 }
 
 func (b *Broker) Consume(topicName string, fromOffset int64, max int) ([]Record, error) {

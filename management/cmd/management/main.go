@@ -22,7 +22,8 @@ func main() {
 		log.Fatalf("new broker: %v", err)
 	}
 
-	srv := api.NewServer(b)
+	apiKey := os.Getenv("STREAMFLOW_MANAGEMENT_API_KEY")
+	srv := api.NewServerWithAPIKey(b, apiKey)
 
 	log.Printf("management-api listening on %s", addr)
 	log.Fatal((&http.Server{Addr: addr, Handler: srv.Handler()}).ListenAndServe())
