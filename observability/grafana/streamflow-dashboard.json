@@ -4,17 +4,23 @@
     {
       "type": "timeseries",
       "title": "Produce Throughput",
-      "targets": [{"expr": "rate(streamflow_broker_produce_records_total[1m])"}]
+      "targets": [
+        { "expr": "rate(streamflow_broker_produce_records_total[1m])" }
+      ]
     },
     {
       "type": "timeseries",
       "title": "Consumer Lag",
-      "targets": [{"expr": "streamflow_broker_consumer_lag"}]
+      "targets": [{ "expr": "streamflow_broker_consumer_lag" }]
     },
     {
       "type": "timeseries",
       "title": "Window Close Latency",
-      "targets": [{"expr": "histogram_quantile(0.95, sum(rate(streamflow_processor_window_close_latency_seconds_bucket[5m])) by (le))"}]
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(streamflow_processor_window_close_latency_seconds_bucket[5m])) by (le))"
+        }
+      ]
     }
   ],
   "schemaVersion": 39,

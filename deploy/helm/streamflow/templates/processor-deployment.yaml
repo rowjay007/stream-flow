@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: streamflow-processor
 spec:
-  replicas: {{ .Values.processor.replicas }}
+  replicas: { { .Values.processor.replicas } }
   selector:
     matchLabels:
       app: streamflow-processor
@@ -14,6 +14,6 @@ spec:
     spec:
       containers:
         - name: processor
-          image: {{ .Values.processor.image }}
+          image: { { .Values.processor.image } }
           ports:
-            - containerPort: {{ .Values.processor.servicePort }}
+            - containerPort: { { .Values.processor.servicePort } }

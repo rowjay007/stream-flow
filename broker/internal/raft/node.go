@@ -5,15 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"sync"
-	"time"
-
 	"github.com/gogo/protobuf/proto"
 	raftlib "go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 	"google.golang.org/grpc/metadata"
+	"io"
+	"log"
+	"sync"
+	"time"
 )
 
 // Node wraps the etcd/raft Node and provides lifecycle methods. This is a

@@ -4,7 +4,7 @@ metadata:
   name: streamflow-broker
 spec:
   serviceName: streamflow-broker
-  replicas: {{ .Values.broker.replicas }}
+  replicas: { { .Values.broker.replicas } }
   selector:
     matchLabels:
       app: streamflow-broker
@@ -15,6 +15,6 @@ spec:
     spec:
       containers:
         - name: broker
-          image: {{ .Values.broker.image }}
+          image: { { .Values.broker.image } }
           ports:
-            - containerPort: {{ .Values.broker.servicePort }}
+            - containerPort: { { .Values.broker.servicePort } }

@@ -8,11 +8,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"streamflow/broker"
 	"strings"
 	"testing"
 	"time"
-
-	"streamflow/broker"
 )
 
 func newTestServer(t *testing.T) http.Handler {

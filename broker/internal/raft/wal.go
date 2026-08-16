@@ -3,16 +3,15 @@ package raft
 import (
 	"context"
 	"fmt"
+	raftpb "go.etcd.io/etcd/raft/v3/raftpb"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
+	"streamflow/broker/storage"
 	"strings"
 	"time"
-
-	raftpb "go.etcd.io/etcd/raft/v3/raftpb"
-	"streamflow/broker/storage"
 )
 
 // walStorage is a simple append-only WAL implementation storing entries

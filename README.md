@@ -229,5 +229,3 @@ Implemented and stable in mainline:
 - Helm/Grafana/ADR artifacts for production operations
 - Raft tick lifecycle and WAL compaction/read-path stabilization
 - Repository-wide passing test suite
-
-

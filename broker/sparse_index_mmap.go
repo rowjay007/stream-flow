@@ -3,9 +3,8 @@ package broker
 import (
 	"encoding/binary"
 	"fmt"
-	"os"
-
 	"golang.org/x/sys/unix"
+	"os"
 )
 
 // SparseMMapIndex stores offset->position entries using a fixed-width mmap file.

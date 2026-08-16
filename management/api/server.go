@@ -2,17 +2,16 @@ package api
 
 import (
 	"encoding/json"
-	"log"
-	"net/http"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"log"
+	"net/http"
+	"strconv"
 	"streamflow/broker"
+	"strings"
+	"sync"
+	"time"
 )
 
 var (
