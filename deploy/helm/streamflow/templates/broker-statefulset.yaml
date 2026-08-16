@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: streamflow-broker
+spec:
+  serviceName: streamflow-broker
+  replicas: {{ .Values.broker.replicas }}
+  selector:
+    matchLabels:
+      app: streamflow-broker
+  template:
+    metadata:
+      labels:
+        app: streamflow-broker
+    spec:
+      containers:
+        - name: broker
+          image: {{ .Values.broker.image }}
+          ports:
+            - containerPort: {{ .Values.broker.servicePort }}

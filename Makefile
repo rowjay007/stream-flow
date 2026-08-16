@@ -1,4 +1,4 @@
-.PHONY: all test build lint docker
+.PHONY: all test build lint docker bench
 
 all: build
 
@@ -22,4 +22,4 @@ docker:
 	docker build -t streamflow/broker:latest .
 
 bench:
-	go test ./bench -bench BenchmarkBrokerProduce -run ^$$ -benchmem -benchtime=1s
+	go test ./bench -bench . -run ^$$ -benchmem -benchtime=2s

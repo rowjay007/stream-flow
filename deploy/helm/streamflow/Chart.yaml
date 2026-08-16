@@ -1,0 +1,6 @@
+apiVersion: v2
+name: streamflow
+description: StreamFlow broker and processor chart
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

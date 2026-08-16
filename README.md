@@ -5,6 +5,7 @@ StreamFlow is a Go-based streaming platform prototype that includes:
 - A single-node log broker with append-only segments and consumer offsets
 - Raft-backed replication internals and durability primitives
 - A management API with metrics, API-key auth, and drain controls
+- Transactional and idempotent produce APIs (epoch/sequence aware)
 - Stream processing and StreamQL foundations
 - Benchmarks, backup tooling, and Kubernetes deployment manifests
 
@@ -12,7 +13,7 @@ StreamFlow is a Go-based streaming platform prototype that includes:
 
 - `broker/`: core broker logic, segment/index storage, sendfile/raw fetch path
 - `broker/internal/raft/`: Raft node, transport, WAL, snapshotting, restart/compaction tests
-- `management/api/`: management HTTP API, auth middleware, audit logging, Prometheus metrics
+- `management/api/`: management HTTP API, auth middleware, GraphQL endpoint, audit logging, Prometheus + OTel hooks
 - `processor/`, `planner/`, `streamql/`: processing runtime and query/parsing execution layers
 - `schema/`: schema registry baseline
 - `bench/`: benchmark entry points and throughput/load test scaffolding
@@ -125,10 +126,17 @@ Endpoints:
 - `GET /topics`
 - `POST /topics`
 - `POST /produce`
+- `POST /produce/idempotent`
 - `GET /consume`
 - `POST /offset/commit`
 - `GET /offset`
 - `POST /admin/drain`
+- `POST /tx/begin`
+- `POST /tx/produce`
+- `POST /tx/commit`
+- `POST /tx/abort`
+- `POST /graphql`
+- `POST /admin/window-close`
 
 Drain example:
 
@@ -141,6 +149,34 @@ curl -X POST http://localhost:8094/admin/drain \
 
 While draining, produce requests return HTTP `409 Conflict`.
 
+GraphQL example:
+
+```bash
+curl -X POST http://localhost:8094/graphql \
+	-H 'Content-Type: application/json' \
+	-H 'X-API-Key: change-me' \
+	-d '{"query":"{ topics }"}'
+```
+
+Transactional flow example:
+
+```bash
+TX_ID=$(curl -s -X POST http://localhost:8094/tx/begin \
+	-H 'Content-Type: application/json' \
+	-H 'X-API-Key: change-me' \
+	-d '{"producer_id":"p1","epoch":1}' | jq -r '.tx_id')
+
+curl -X POST http://localhost:8094/tx/produce \
+	-H 'Content-Type: application/json' \
+	-H 'X-API-Key: change-me' \
+	-d '{"tx_id":"'"$TX_ID"'","topic":"orders","key":"k1","value":"v1"}'
+
+curl -X POST http://localhost:8094/tx/commit \
+	-H 'Content-Type: application/json' \
+	-H 'X-API-Key: change-me' \
+	-d '{"tx_id":"'"$TX_ID"'"}'
+```
+
 ## Benchmarks
 
 Run benchmark suite:
@@ -150,6 +186,12 @@ make bench
 ```
 
 For realistic sendfile and throughput characteristics, benchmark on Linux.
+
+Direct benchmark command:
+
+```bash
+go test ./bench -bench . -run ^$ -benchmem -benchtime=2s
+```
 
 ## Backup tooling
 
@@ -164,17 +206,27 @@ Use this command path for snapshot upload/download workflows.
 ## Additional docs
 
 - Architecture decision: `ADR/0001-zero-copy-sendfile.md`
+- Additional ADRs: `ADR/0002-raft-isr-minisr.md` ... `ADR/0008-kubernetes-packaging.md`
 - Operator notes: `docs/operator.md`
 - SDK notes: `sdk/README.md`
+- Helm chart: `deploy/helm/streamflow`
+- Grafana dashboard: `observability/grafana/streamflow-dashboard.json`
 
 ## Current status
 
 Implemented and stable in mainline:
 
 - Core broker produce/consume/fetch-raw flow
+- Idempotent producer sequencing and transaction staging/commit APIs
 - Segment index loading on startup
+- Sparse mmap index primitive for offset indexing
 - Durable offset commit/load
-- Management API with auth, audit logs, and Prometheus instrumentation
+- Management API with REST + GraphQL, auth, audit logs, Prometheus metrics, and OTel instrumentation
+- Consumer group coordinator with deterministic rebalancing
+- Stream processing utilities: tumbling/sliding/session windows, watermarking, CEP FSM, time-bounded stream join
+- Schema registry extensions for JSONSchema/Avro/Protobuf versioning and backward-compat checks
+- Built-in connector surfaces for Kafka bridge, PostgreSQL CDC, S3, and HTTP
+- Helm/Grafana/ADR artifacts for production operations
 - Raft tick lifecycle and WAL compaction/read-path stabilization
 - Repository-wide passing test suite
 

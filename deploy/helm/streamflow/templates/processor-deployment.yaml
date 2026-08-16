@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: streamflow-processor
+spec:
+  replicas: {{ .Values.processor.replicas }}
+  selector:
+    matchLabels:
+      app: streamflow-processor
+  template:
+    metadata:
+      labels:
+        app: streamflow-processor
+    spec:
+      containers:
+        - name: processor
+          image: {{ .Values.processor.image }}
+          ports:
+            - containerPort: {{ .Values.processor.servicePort }}

@@ -1,0 +1,9 @@
+broker:
+  replicas: 3
+  image: streamflow/broker:latest
+  servicePort: 9092
+
+processor:
+  replicas: 2
+  image: streamflow/processor:latest
+  servicePort: 9093

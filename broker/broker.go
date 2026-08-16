@@ -19,13 +19,24 @@ type Broker struct {
 	mu           sync.RWMutex
 	topics       map[string]*Topic
 	drainingTill time.Time
+	producerSeq  map[string]int64
+	dedupCache   map[string]Record
+	txState      map[string]*Transaction
+	coordinator  *ConsumerGroupCoordinator
 }
 
 func NewBroker(dir string) (*Broker, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	return &Broker{dir: dir, topics: make(map[string]*Topic)}, nil
+	return &Broker{
+		dir:         dir,
+		topics:      make(map[string]*Topic),
+		producerSeq: make(map[string]int64),
+		dedupCache:  make(map[string]Record),
+		txState:     make(map[string]*Transaction),
+		coordinator: NewConsumerGroupCoordinator(),
+	}, nil
 }
 
 func (b *Broker) CreateTopic(name string) (*Topic, error) {
