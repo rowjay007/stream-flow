@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -23,6 +24,7 @@ type Node struct {
 	tr        Transport
 	node      raftlib.Node
 	stopc     chan struct{}
+	stopOnce  sync.Once
 	peers     []raftlib.Peer
 	peerAddrs map[uint64]string
 }
@@ -87,6 +89,20 @@ func (n *Node) Start(ctx context.Context) error {
 		peers = []raftlib.Peer{{ID: n.id}}
 	}
 	n.node = raftlib.StartNode(&cfg, peers)
+
+	// etcd/raft requires external ticking to drive elections/heartbeats.
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-n.stopc:
+				return
+			case <-ticker.C:
+				n.node.Tick()
+			}
+		}
+	}()
 
 	// If using an in-process transport, register a receive channel so
 	// other nodes can send messages directly to this node.
@@ -193,11 +209,13 @@ func (n *Node) Start(ctx context.Context) error {
 }
 
 func (n *Node) Stop() error {
-	close(n.stopc)
-	if n.node != nil {
-		n.node.Stop()
-	}
-	log.Printf("raft: stopped node %d", n.id)
+	n.stopOnce.Do(func() {
+		close(n.stopc)
+		if n.node != nil {
+			n.node.Stop()
+		}
+		log.Printf("raft: stopped node %d", n.id)
+	})
 	return nil
 }
 

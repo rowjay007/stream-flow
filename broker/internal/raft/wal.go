@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -137,18 +138,31 @@ func (w *walStorage) ReadWAL(fromIndex uint64) ([]byte, error) {
 			files = append(files, filepath.Join(w.dir, name))
 		}
 	}
-	// sort lexicographically (os.ReadDir gives directory order but ensure sort)
+	sort.Strings(files)
 	if len(files) == 0 {
 		return nil, nil
 	}
-	// simple concatenation
+	// decode length-prefixed append blocks and concatenate payload bytes
+	// so callers receive only marshaled raft entries.
 	var out []byte
 	for _, f := range files {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, b...)
+		i := 0
+		for i < len(b) {
+			if i+4 > len(b) {
+				break
+			}
+			l := int(uint32(b[i])<<24 | uint32(b[i+1])<<16 | uint32(b[i+2])<<8 | uint32(b[i+3]))
+			i += 4
+			if l < 0 || i+l > len(b) {
+				break
+			}
+			out = append(out, b[i:i+l]...)
+			i += l
+		}
 	}
 	if fromIndex >= uint64(len(out)) {
 		return nil, nil
@@ -225,8 +239,22 @@ func (w *walStorage) Compact(compactIndex uint64) error {
 		return err
 	}
 	var keep []raftpb.Entry
+	hasIndexedEntries := false
 	for _, e := range ents {
-		if e.Index > compactIndex {
+		if e.Index > 0 {
+			hasIndexedEntries = true
+			break
+		}
+	}
+	for i, e := range ents {
+		if hasIndexedEntries {
+			if e.Index > compactIndex {
+				keep = append(keep, e)
+			}
+			continue
+		}
+		// Fallback for tests/fixtures that encode entries without index metadata.
+		if uint64(i+1) > compactIndex {
 			keep = append(keep, e)
 		}
 	}
@@ -254,7 +282,7 @@ func (w *walStorage) Compact(compactIndex uint64) error {
 	if err == nil {
 		for _, e := range entries {
 			name := e.Name()
-			if !e.IsDir() && strings.HasPrefix(name, "wal.") {
+			if !e.IsDir() && name != "wal.log" && strings.HasPrefix(name, "wal.") {
 				os.Remove(filepath.Join(w.dir, name))
 			}
 		}

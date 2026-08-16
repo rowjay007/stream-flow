@@ -1,10 +1,9 @@
 package raft
 
 import (
+	"go.etcd.io/etcd/raft/v3/raftpb"
 	"path/filepath"
 	"testing"
-
-	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 func TestWALCompactionKeepsLaterEntries(t *testing.T) {
