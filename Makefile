@@ -3,12 +3,16 @@
 all: build
 
 build:
-	go build -v -o bin/broker ./cmd/broker
-	go build -v -o bin/processor ./processor/cmd/processor
+	go build -v -o bin/broker ./apps/broker
+	go build -v -o bin/processor ./apps/processor
+	go build -v -o bin/processor-server ./apps/processor-server
 	go build -v -o bin/streamql ./streamql/cmd/streamql
-	go build -v -o bin/schema-registry ./schema/cmd/schema-registry
-	go build -v -o bin/connector ./connector/cmd/connector
-	go build -v -o bin/management ./management/cmd/management
+	go build -v -o bin/streamql-runner ./jobs/streamql-runner
+	go build -v -o bin/schema-registry ./apps/schema-registry
+	go build -v -o bin/connector ./apps/connector
+	go build -v -o bin/gateway ./apps/region-gateway
+	go build -v -o bin/backup ./jobs/backup
+	go build -v -o bin/management ./apps/management-api
 
 
 test:

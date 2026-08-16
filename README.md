@@ -17,7 +17,9 @@ StreamFlow is a Go-based streaming platform prototype that includes:
 - `processor/`, `planner/`, `streamql/`: processing runtime and query/parsing execution layers
 - `schema/`: schema registry baseline
 - `bench/`: benchmark entry points and throughput/load test scaffolding
-- `cmd/`: runnable binaries (`broker`, `gateway`, `backup`, `processor-server`, `streamql-runner`)
+- `apps/`: canonical long-running service entrypoints
+- `jobs/`: canonical batch/utility entrypoints
+- `cmd/`: legacy compatibility entrypoints (kept during migration)
 - `deploy/`, `k8s/`: deployment manifests
 
 ## Prerequisites
@@ -65,7 +67,7 @@ make docker
 Start broker:
 
 ```bash
-go run ./cmd/broker
+go run ./apps/broker
 ```
 
 Default address: `:9092`
@@ -102,7 +104,7 @@ curl 'http://localhost:9092/fetchraw?topic=orders&offset=0' --output - > record.
 Start management API:
 
 ```bash
-go run ./management/cmd/management
+go run ./apps/management-api
 ```
 
 Default address: `:8094`
@@ -198,7 +200,7 @@ go test ./bench -bench . -run ^$ -benchmem -benchtime=2s
 Backup CLI entry point:
 
 ```bash
-go run ./cmd/backup
+go run ./jobs/backup
 ```
 
 Use this command path for snapshot upload/download workflows.
@@ -207,6 +209,8 @@ Use this command path for snapshot upload/download workflows.
 
 - Architecture decision: `ADR/0001-zero-copy-sendfile.md`
 - Additional ADRs: `ADR/0002-raft-isr-minisr.md` ... `ADR/0008-kubernetes-packaging.md`
+- Microservice catalog: `docs/architecture/microservices-catalog.md`
+- Enterprise structure guide: `docs/architecture/enterprise-project-structure.md`
 - Operator notes: `docs/operator.md`
 - SDK notes: `sdk/README.md`
 - Helm chart: `deploy/helm/streamflow`
