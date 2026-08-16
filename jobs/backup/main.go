@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
-
 	"streamflow/broker/storage"
+	"time"
 )
 
 func main() {

@@ -5,7 +5,7 @@
 
 ## Service Impact
 
-- Affected services (from services/*):
+- Affected services (from services/\*):
 - Backward compatibility impact:
 - Config/env changes:
 
