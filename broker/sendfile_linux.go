@@ -13,7 +13,7 @@ func sendFile(w io.Writer, f *os.File, off int64, count int64) (int64, error) {
 
 	wf, ok := w.(*os.File)
 	if !ok {
-		return 0, io.ErrInvalid
+		return 0, os.ErrInvalid
 	}
 	var total int64
 
