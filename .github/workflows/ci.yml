@@ -7,43 +7,15 @@ on:
     branches: [ main, master ]
 
 jobs:
-  test-streamflow:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.23
-      - name: Run StreamQL and Processor tests
-        run: |
-          go test ./streamql -v
-          go test ./processor -v
-          go test ./schema -v
-name: CI
-
-on:
-  push:
-  pull_request:
-
-jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: '1.23'
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.0
@@ -56,3 +28,17 @@ jobs:
 
       - name: Run golangci-lint
         run: ~/go/bin/golangci-lint run ./...
+
+  test-streamflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Run StreamQL and Processor tests
+        run: |
+          go test ./streamql -v
+          go test ./processor -v
+          go test ./schema -v
