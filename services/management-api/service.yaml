@@ -1,0 +1,10 @@
+name: management-api
+kind: service
+tier: control-plane
+entrypoint: apps/management-api/main.go
+legacyEntrypoint: management/cmd/management/main.go
+protocol: http
+port: 8094
+healthEndpoint: /health
+metricsEndpoint: /metrics
+owner: team-control-plane

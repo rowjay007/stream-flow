@@ -1,0 +1,9 @@
+name: broker
+kind: service
+tier: data-plane
+entrypoint: apps/broker/main.go
+legacyEntrypoint: cmd/broker/main.go
+protocol: http
+port: 9092
+healthEndpoint: /health
+owner: team-data-plane

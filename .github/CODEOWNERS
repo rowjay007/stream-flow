@@ -1,0 +1,21 @@
+# StreamFlow ownership map
+
+* @rowjay007
+
+/apps/broker/ @rowjay007
+/apps/processor/ @rowjay007
+/apps/processor-server/ @rowjay007
+/apps/management-api/ @rowjay007
+/apps/schema-registry/ @rowjay007
+/apps/connector/ @rowjay007
+/apps/region-gateway/ @rowjay007
+/jobs/ @rowjay007
+/broker/ @rowjay007
+/management/ @rowjay007
+/processor/ @rowjay007
+/schema/ @rowjay007
+/streamql/ @rowjay007
+/deploy/ @rowjay007
+/k8s/ @rowjay007
+/services/ @rowjay007
+/docs/architecture/ @rowjay007

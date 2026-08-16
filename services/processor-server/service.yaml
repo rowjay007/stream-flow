@@ -1,0 +1,8 @@
+name: processor-server
+kind: service
+tier: data-plane
+entrypoint: apps/processor-server/main.go
+legacyEntrypoint: cmd/processor-server/main.go
+protocol: grpc
+listen: 127.0.0.1:9090
+owner: team-data-plane

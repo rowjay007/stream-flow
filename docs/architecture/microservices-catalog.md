@@ -2,6 +2,8 @@
 
 This document is the source of truth for runnable services in this repository.
 
+Canonical metadata source: `services/*/service.yaml`
+
 ## Core Data Plane
 
 1. Broker API service
@@ -76,3 +78,4 @@ This document is the source of truth for runnable services in this repository.
 1. Services 1 through 7 are long-running processes and should be treated as deployable microservices.
 2. Services 8 and 9 are operational tooling workloads and should be deployed as jobs, not as always-on services.
 3. If a new main package is added, update this file in the same pull request.
+4. If service runtime metadata changes, update the corresponding `services/*/service.yaml` file.

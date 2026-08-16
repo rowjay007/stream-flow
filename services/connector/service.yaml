@@ -1,0 +1,9 @@
+name: connector
+kind: service
+tier: integration
+entrypoint: apps/connector/main.go
+legacyEntrypoint: connector/cmd/connector/main.go
+protocol: http
+port: 50072
+healthEndpoint: /health
+owner: team-integration

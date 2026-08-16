@@ -1,0 +1,6 @@
+name: streamql-runner-job
+kind: job
+tier: operations
+entrypoint: jobs/streamql-runner/main.go
+legacyEntrypoint: cmd/streamql-runner/main.go
+owner: team-platform

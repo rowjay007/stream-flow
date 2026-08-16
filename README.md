@@ -19,6 +19,7 @@ StreamFlow is a Go-based streaming platform prototype that includes:
 - `bench/`: benchmark entry points and throughput/load test scaffolding
 - `apps/`: canonical long-running service entrypoints
 - `jobs/`: canonical batch/utility entrypoints
+- `services/`: canonical per-service metadata registry
 - `cmd/`: legacy compatibility entrypoints (kept during migration)
 - `deploy/`, `k8s/`: deployment manifests
 
@@ -211,6 +212,7 @@ Use this command path for snapshot upload/download workflows.
 - Additional ADRs: `ADR/0002-raft-isr-minisr.md` ... `ADR/0008-kubernetes-packaging.md`
 - Microservice catalog: `docs/architecture/microservices-catalog.md`
 - Enterprise structure guide: `docs/architecture/enterprise-project-structure.md`
+- Service standards: `docs/architecture/service-standards.md`
 - Operator notes: `docs/operator.md`
 - SDK notes: `sdk/README.md`
 - Helm chart: `deploy/helm/streamflow`

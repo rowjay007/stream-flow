@@ -1,0 +1,9 @@
+name: processor
+kind: service
+tier: data-plane
+entrypoint: apps/processor/main.go
+legacyEntrypoint: processor/cmd/processor/main.go
+protocol: http
+port: 50070
+healthEndpoint: /health
+owner: team-data-plane

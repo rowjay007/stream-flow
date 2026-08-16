@@ -1,0 +1,6 @@
+name: backup-job
+kind: job
+tier: operations
+entrypoint: jobs/backup/main.go
+legacyEntrypoint: cmd/backup/main.go
+owner: team-platform

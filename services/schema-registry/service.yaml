@@ -1,0 +1,9 @@
+name: schema-registry
+kind: service
+tier: control-plane
+entrypoint: apps/schema-registry/main.go
+legacyEntrypoint: schema/cmd/schema-registry/main.go
+protocol: http
+port: 8081
+healthEndpoint: /health
+owner: team-control-plane

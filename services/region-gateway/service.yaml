@@ -1,0 +1,8 @@
+name: region-gateway
+kind: service
+tier: integration
+entrypoint: apps/region-gateway/main.go
+legacyEntrypoint: cmd/gateway/main.go
+protocol: internal
+addressFlagDefault: gateway-1
+owner: team-integration
